@@ -10,7 +10,7 @@ Helper function to easily save plots to the same directory. If show_print is tru
 then "Saving figure to OUTPUT" is printed in the terminal.
 """
 function save_figure(p, fname::String; show_print::Bool = true)
-    path = "output/convergence/$(fname)"
+    path = "output/$(fname)"
     if show_print
         println("Saving figure to $(path)")
     end

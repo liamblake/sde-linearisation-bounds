@@ -1,7 +1,9 @@
+using Random
 using Statistics
 
 using DifferentialEquations
 using JLD
+using LaTeXStrings
 using Plots
 using ProgressMeter
 
@@ -12,8 +14,8 @@ include("utils.jl")
 """
 Generate N realisations of an SDE, returning a matrix of the final position.
 """
-function sde_realisations(vel, σ, N, n, y₀, t₀, T, dt)
-    sde_prob = SDEProblem(vel, σ, y₀, (t₀, T), noise_rate_prototype=zeros(2 * n, n))
+function sde_realisations(dest, vel!, σ, N, d_y, d_W, y₀, t₀, T, dt)
+    sde_prob = SDEProblem(vel!, σ, y₀, (t₀, T), noise_rate_prototype=zeros(d_y, d_W))
     ens = EnsembleProblem(sde_prob)
     sol = solve(
         ens,
@@ -25,7 +27,7 @@ function sde_realisations(vel, σ, N, n, y₀, t₀, T, dt)
     )
 
     # Only need the final position
-    return reduce(hcat, DifferentialEquations.EnsembleAnalysis.get_timepoint(sol, T))
+    dest .= reduce(hcat, DifferentialEquations.EnsembleAnalysis.get_timepoint(sol, T))
 
 end
 
@@ -60,14 +62,14 @@ function convergence_validation(
     end
 
     # Plot the deterministic trajectory
-    p = plot(det_sol, vars=(1, 2), color=:black, legend=false)
+    p = plot(det_sol, vars=(1, 2), xlabel=L"x_1", ylabel=L"x_2", color=:black, legend=false)
     save_figure(p, "$(model.name)/deterministic_trajectory.pdf")
 
     # Calculate the deviation covariance from the integral expression
     Σ = Σ_calculation(model, dt, 0.0001)
 
     rs = [1, 2, 3, 4]
-    εs = [0.5, 0.1] #, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001]
+    εs = [0.5, 0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001]
 
     nε = length(εs)
 
@@ -80,7 +82,10 @@ function convergence_validation(
     # Save ALL realisations of the limiting equation. The more data the merrier.
     all_limit_samples = zeros(n, N * nε)
 
-    data_path = ε -> "../data/sde_realisations/$(model.name)_$(ε).jld"
+    data_path = ε -> "data/$(model.name)_$(ε).jld"
+
+    # For storing simulations - initialise once and reuse
+    joint_rels = Array{Float64}(undef, (2 * n, N))
 
     println("Generating realisations for values of ε...")
     @showprogress for (i, ε) in enumerate(εs)
@@ -106,9 +111,11 @@ function convergence_validation(
 
         else
             joint_rels = sde_realisations(
+                joint_rels,
                 joint_system!,
                 σ!,
                 N,
+                2 * n,
                 n,
                 vcat(model.x₀, [0.0, 0.0]),
                 model.t₀,
@@ -153,6 +160,8 @@ function convergence_validation(
                 y_rels[1, :],
                 y_rels[2, :],
                 bins=100,
+                xlabel=L"y_1",
+                ylabel=L"y_2",
                 legend=false,
                 cbar=true,
                 c=cgrad(:spring, rev=true),
@@ -184,6 +193,8 @@ function convergence_validation(
                 z_rels[1, :],
                 z_rels[2, :],
                 bins=100,
+                xlabel=L"z_1",
+                ylabel=L"z_2",
                 legend=false,
                 cbar=true,
                 c=cgrad(:spring, rev=true),
@@ -394,7 +405,7 @@ function ex_lorenz()::Model
 end
 
 
-function validate_all(N::Int64; reload_data::Bool=false, nosave::Bool=true)
+function validate_all(N::Int64; reload_data::Bool=false, nosave::Bool=false)
     Random.seed!(20220805)
     convergence_validation(ex_rossby(), N, reload_data=reload_data, nosave=nosave)
     # convergence_validation(ex_lorenz()..., N)

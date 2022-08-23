@@ -12,7 +12,7 @@ approximation of a spatial derivative. The number of points in the grid is
 determined from the dimension of x; if the length of x is n, then 2n points are
 calculated.
 """
-function star_grid(x::AbstractVector, δx::Float64)::Array
+function star_grid(x::AbstractVector, δx::Float64)::Array{Float64, }
     n = length(x)
 
     # Matrix of coordinate shifts
@@ -49,8 +49,8 @@ function Σ_calculation(model::Model, dt::Float64, dx::Float64)::Symmetric
     # Generate the required flow map data
     # First, advect the initial condition forward to obtain the final position
     prob = ODEProblem(model.velocity!, model.x₀, (model.t₀, model.T))
-    det_sol = solve(prob, Euler(), dt = dt)
-    w = last(det_sol)
+    det_sol = solve(prob, Euler(), dt=dt)
+	w = last(det_sol)::Vector{Float64}
     # Fs = reverse(det_sol.u)
 
     # Form the star grid around the final position
@@ -59,9 +59,9 @@ function Σ_calculation(model::Model, dt::Float64, dx::Float64)::Symmetric
     # Advect these points backwards to the initial time
     prob = ODEProblem(model.velocity!, star[1, :], (model.T, model.t₀))
     ensemble =
-        EnsembleProblem(prob, prob_func = (prob, i, _) -> remake(prob, u0 = star[i, :]))
+        EnsembleProblem(prob, prob_func=(prob, i, _) -> remake(prob, u0=star[i, :]))
     sol =
-        solve(ensemble, Euler(), EnsembleThreads(), dt = dt, trajectories = 2 * model.d)
+        solve(ensemble, Euler(), EnsembleThreads(), dt=dt, trajectories=2 * model.d)
 
     # Rearrange the ensemble solution 
     star_values = [
@@ -83,8 +83,8 @@ function Σ_calculation(model::Model, dt::Float64, dx::Float64)::Symmetric
 
     # Approximate an integral given discrete evaluations, using the composite Simpson's rule
     # Assume the data is equidistant with respect to the variable being integrate.
-    feven = integrand[2:2:end]
-    fodd = integrand[1:2:end]
+    feven = @view integrand[2:2:end]
+    fodd = @view integrand[1:2:end]
 
     Σ = dt / 3 * (integrand[1] + 2 * sum(feven) + 4 * sum(fodd) + last(integrand))
 
