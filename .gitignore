@@ -19,3 +19,6 @@ docs/site/
 
 # Saved trajectory data
 data/
+
+# Generated figures
+output/
