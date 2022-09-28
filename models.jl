@@ -1,10 +1,12 @@
+using Parameters
 
-struct Model
+@with_kw struct Model
     name::String
     d::UInt8
     velocity!::Function
     ∇u::Function
-    x₀::AbstractVector
+    Kᵤ::Float64
+    x₀s::AbstractVector
     t₀::Float64
     T::Float64
 end
@@ -46,11 +48,16 @@ function ex_rossby()::Model
         ]
 
     # Time and space parameters
-    x₀ = [0.0, 1.0]
+	x₀s = [[0.0, 1.0], [1.0, 1.0]]
     t₀ = 0.0
     T = 1.0
 
-    return Model("rossby", 2, rossby!, ∇u, x₀, t₀, T)
+    # Bounds on the velocity and gradient norms
+    vel_bound = sqrt(2) * max(abs(c) + abs(A) + abs(ϵ * l₁), abs(A * K) + abs(ϵ * k₁))
+    grad_bound = 2 * max(abs(A * K) + abs(ϵ * k₁ * l₁), abs(A) + abs(ϵ * l₁^2), abs(A * K^2) + abs(ϵ * k₁ * l₁), abs(A * K) + abs(ϵ * k₁ * l₁))
+    Kᵤ = max(vel_bound, grad_bound)
+
+    return Model("rossby", 2, rossby!, ∇u, Kᵤ, x₀s, t₀, T)
 end
 
 """
@@ -60,7 +67,7 @@ end
 """
 function ex_lorenz()::Model
     # Parameters
-    d = 8
+    d = 4
     F = 8
 
     # In-place velocity field
@@ -71,7 +78,7 @@ function ex_lorenz()::Model
         @inbounds dx[2] = (x[3] - x[d]) * x[1] - x[2] + F
         @inbounds dx[d] = (x[1] - x[d-2]) * x[d-1] - x[d] + F
         # The general case.
-        for n = 3:(d-1)
+        for n in 3:(d-1)
             @inbounds dx[n] = (x[n+1] - x[n-2]) * x[n-1] - x[n] + F
         end
 
@@ -82,20 +89,23 @@ function ex_lorenz()::Model
     # Some magic using the diagm function from the LinearAlgebra library.
     ∇u =
         (x, _) -> diagm(
-            -d => [x[d-1]],
-            -2 => circshift(x, -1)[1:(d-1)],
+            1 - d => [x[d-1]],
+            -2 => circshift(x, -1)[1:(d-2)],
             -1 => circshift(x, -1)[2:d] - circshift(x[2:d], 1),
             0 => -ones(d),
             1 => circshift(x, 1)[1:(d-1)],
-            d - 1 => -[x[d], x[1]],
-            d => [x[2] - x[d-1]],
+            d - 2 => -[x[d], x[1]],
+            d - 1 => [x[2] - x[d-1]],
         )
 
+
     # Time and space parameters
-    x₀ = zeros(d)
+    x₀ = ones(d)
     x₀[1] += 0.01
     t₀ = 0.0
     T = 1.0
+
+    # println(∇u(x₀, 1))
 
     return Model("lorenz", d, lorenz!, ∇u, x₀, t₀, T)
 
