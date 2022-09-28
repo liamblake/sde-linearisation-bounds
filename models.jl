@@ -6,9 +6,6 @@ using Parameters
     velocity!::Function
     ∇u::Function
     Kᵤ::Float64
-    x₀s::AbstractVector
-    t₀::Float64
-    T::Float64
 end
 
 
@@ -47,17 +44,12 @@ function ex_rossby()::Model
             -A*K^2*sin(K * x[1])*sin(x[2])-ϵ*k₁^2*sin(k₁ * (x[1] - c₁ * t))*sin(l₁ * x[2]) A*K*cos(K * x[1])*cos(x[2])+ϵ*k₁*l₁*cos(k₁ * (x[1] - c₁ * t))*cos(l₁ * x[2])
         ]
 
-    # Time and space parameters
-	x₀s = [[0.0, 1.0], [1.0, 1.0]]
-    t₀ = 0.0
-    T = 1.0
-
     # Bounds on the velocity and gradient norms
     vel_bound = sqrt(2) * max(abs(c) + abs(A) + abs(ϵ * l₁), abs(A * K) + abs(ϵ * k₁))
     grad_bound = 2 * max(abs(A * K) + abs(ϵ * k₁ * l₁), abs(A) + abs(ϵ * l₁^2), abs(A * K^2) + abs(ϵ * k₁ * l₁), abs(A * K) + abs(ϵ * k₁ * l₁))
     Kᵤ = max(vel_bound, grad_bound)
 
-    return Model("rossby", 2, rossby!, ∇u, Kᵤ, x₀s, t₀, T)
+    return Model("rossby", 2, rossby!, ∇u, Kᵤ)
 end
 
 """
@@ -99,15 +91,7 @@ function ex_lorenz()::Model
         )
 
 
-    # Time and space parameters
-    x₀ = ones(d)
-    x₀[1] += 0.01
-    t₀ = 0.0
-    T = 1.0
-
-    # println(∇u(x₀, 1))
-
-    return Model("lorenz", d, lorenz!, ∇u, x₀, t₀, T)
+    return Model("lorenz", d, lorenz!, ∇u, 1.0)
 
 end
 

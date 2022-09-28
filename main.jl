@@ -59,12 +59,14 @@ has dimension 2. Plotting and saving histograms is very slow for large N.
 """
 function convergence_validation(
     model::Model,
+	x₀s::AbstractVector,
+	t₀::Float64, 
+	T::Float64,
     N::Int64;
-    plot_histograms::Bool=true,
-    reload_data::Bool=false,
-    nosave::Bool=true
+    attempt_reload::Bool=true,
+	save_on_generation::Bool=true
 )
-    @unpack name, d, velocity!, ∇u, Kᵤ, x₀s, t₀, T = model
+    @unpack name, d, velocity!, ∇u, Kᵤ= model
 
 	model_name = name
     println("Validation for $(name) model...")
@@ -82,7 +84,7 @@ function convergence_validation(
     w = last(det_sol.u)
 
     # Only attempt to plot histograms if the model dimension is 2
-    plot_histograms *= (d == 2)
+    plot_histograms = (d == 2) 
 
     # Set up as a joint system so the same noise realisation is used.
     function joint_system!(dx, x, _, t)
@@ -96,7 +98,7 @@ function convergence_validation(
     save_figure(p, "$(name)/deterministic_trajectory.pdf")
 
     # Calculate the deviation covariance from the integral expression
-    Σ = Σ_calculation(model, x₀, dt)
+    Σ = Σ_calculation(model, x₀, t₀, T, dt)
 	# The maximum eigenvalue - the theoretical value for stochastic sensitivity
 	S2 = eigmax(Matrix(Σ), permute = false, scale = false)
 
@@ -114,8 +116,6 @@ function convergence_validation(
 
     # Save ALL realisations of the limiting equation. The more data the merrier.
     all_limit_samples = zeros(d, N * nε)
-
-    data_path = ε -> "data/$(name)_$(ε).jld"
 
     # For storing simulations - pre-allocate once and reuse
     joint_rels = Array{Float64}(undef, (2 * d, N))
@@ -136,10 +136,12 @@ function convergence_validation(
         end
 
         # Simulate from the y equation and the limiting equation simultaneously
-        if reload_data
+		# If attempt_reload is true and a data file exists, load the data. Otherwise,
+		# generate new data and save.
+		data_path = "data/$(name)_$(ε).jld"
+		if attempt_reload && isfile(data_path)
             # Load previously simulated data 
-            joint_rels .= load(data_path(ε))["data"]
-
+            joint_rels .= load(data_path)["data"]
         else
             sde_realisations(
                 joint_rels,
@@ -153,8 +155,8 @@ function convergence_validation(
                 T,
                 dt,
             )
-            if !nosave
-                save(data_path(ε), "data", joint_rels)
+            if save_on_generation
+                save(data_path, "data", joint_rels)
             end
         end
         y_rels = @view joint_rels[1:d, :]
@@ -364,8 +366,16 @@ end
 end
 
 
-function validate_all(N::Int64; reload_data::Bool=false, nosave::Bool=false)
+function validate_all(N::Int64; attempt_reload::Bool=true, save_on_generation::Bool=true)
     Random.seed!(20220805)
-    convergence_validation(ex_rossby(), N, plot_histograms=true, reload_data=reload_data, nosave=nosave)
-    # convergence_validation(ex_lorenz(), N, plot_histograms=false, reload_data=reload_data, nosave=nosave)
+
+	### Perturbed Rossby wave ###
+	# Initial conditions
+	x₀s = [[0.0, 1.0]]#, [1.5, 1.0]]
+	# Time interval of interest
+	t₀ = 0.0
+	T = 1.0
+
+    convergence_validation(ex_rossby(), x₀s, t₀, T, N, attempt_reload=attempt_reload, save_on_generation=save_on_generation)
+
 end

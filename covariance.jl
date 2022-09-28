@@ -69,8 +69,8 @@ end
 
 Calculate the deviation covariance matrix Σ with an in-place specification of the velocity field.
 """
-function Σ_calculation(model::Model, x₀, dt::Float64)::Symmetric{Float64}
-    @unpack d, velocity!, ∇u, t₀, T = model
+function Σ_calculation(model::Model, x₀::AbstractVector, t₀::Real, T::Real, dt::Real)::Symmetric{Float64}
+    @unpack d, velocity!, ∇u = model
 
     ts = t₀:dt:T
     # Generate the required flow map data
