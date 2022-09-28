@@ -46,7 +46,13 @@ function ex_rossby()::Model
 
     # Bounds on the velocity and gradient norms
     vel_bound = sqrt(2) * max(abs(c) + abs(A) + abs(ϵ * l₁), abs(A * K) + abs(ϵ * k₁))
-    grad_bound = 2 * max(abs(A * K) + abs(ϵ * k₁ * l₁), abs(A) + abs(ϵ * l₁^2), abs(A * K^2) + abs(ϵ * k₁ * l₁), abs(A * K) + abs(ϵ * k₁ * l₁))
+    grad_bound =
+        2 * max(
+            abs(A * K) + abs(ϵ * k₁ * l₁),
+            abs(A) + abs(ϵ * l₁^2),
+            abs(A * K^2) + abs(ϵ * k₁ * l₁),
+            abs(A * K) + abs(ϵ * k₁ * l₁),
+        )
     Kᵤ = max(vel_bound, grad_bound)
 
     return Model("rossby", 2, rossby!, ∇u, Kᵤ)
@@ -70,7 +76,7 @@ function ex_lorenz()::Model
         @inbounds dx[2] = (x[3] - x[d]) * x[1] - x[2] + F
         @inbounds dx[d] = (x[1] - x[d-2]) * x[d-1] - x[d] + F
         # The general case.
-        for n in 3:(d-1)
+        for n = 3:(d-1)
             @inbounds dx[n] = (x[n+1] - x[n-2]) * x[n-1] - x[n] + F
         end
 
@@ -94,4 +100,3 @@ function ex_lorenz()::Model
     return Model("lorenz", d, lorenz!, ∇u, 1.0)
 
 end
-

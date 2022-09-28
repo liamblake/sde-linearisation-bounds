@@ -13,7 +13,7 @@ approximation of a spatial derivative. The number of points in the grid is
 determined from the dimension of x; if the length of x is n, then 2n points are
 calculated.
 """
-function star_grid(x::AbstractVector, δx::Float64)::Array{Float64,}
+function star_grid(x::AbstractVector, δx::Float64)::Array{Float64}
     n = length(x)
 
     # Matrix of coordinate shifts
@@ -69,14 +69,20 @@ end
 
 Calculate the deviation covariance matrix Σ with an in-place specification of the velocity field.
 """
-function Σ_calculation(model::Model, x₀::AbstractVector, t₀::Real, T::Real, dt::Real)::Symmetric{Float64}
+function Σ_calculation(
+    model::Model,
+    x₀::AbstractVector,
+    t₀::Real,
+    T::Real,
+    dt::Real,
+)::Symmetric{Float64}
     @unpack d, velocity!, ∇u = model
 
     ts = t₀:dt:T
     # Generate the required flow map data
     # First, advect the initial condition forward to obtain the final position
     prob = ODEProblem(velocity!, x₀, (t₀, T))
-    det_sol = solve(prob, Euler(), dt=dt)
+    det_sol = solve(prob, Euler(), dt = dt)
 
     ∇u_F = t -> ∇u(det_sol(t), t)
 
@@ -124,20 +130,38 @@ Calculate the upper bound constant in the Burkholder-Davis-Gundy inequality.
 """
 function bdg_constant(p::Real)::Real
     if p ≤ 0
-		throw(DomainError())
+        throw(DomainError())
     elseif p < 1
         return (16 / p)^p
     else
-		return 2^(2*p^2)*p^(2*p^2+p)*(2*p - 1)^(p - 2*p^2)
+        return 2^(2 * p^2) * p^(2 * p^2 + p) * (2 * p - 1)^(p - 2 * p^2)
     end
 end
 
 
 function Dᵣ(r, n, t, K_u, K_σ)
-	return 6^(r-1) * K_u^r * K_σ^r * t^(2*r) * n^(3*r/2) * bdg_constant(r) * (n^(r/2) * K_σ^r * exp(2^(2*r - 1) * K_u^(2*r) * t^(2*r)) + bdg_constant(r/2) * exp(2^(r - 1) * K_u^r * t^r)) * exp(3^(r-1) * t^r * K_u^r) 
+    return 6^(r - 1) *
+           K_u^r *
+           K_σ^r *
+           t^(2 * r) *
+           n^(3 * r / 2) *
+           bdg_constant(r) *
+           (
+               n^(r / 2) * K_σ^r * exp(2^(2 * r - 1) * K_u^(2 * r) * t^(2 * r)) +
+               bdg_constant(r / 2) * exp(2^(r - 1) * K_u^r * t^r)
+           ) *
+           exp(3^(r - 1) * t^r * K_u^r)
 end
 
 
 function log_Dᵣ(r, n, t, K_u, K_σ)
-	return (r - 1)*log(6) + 5*r / 2 * log(n) + r*log(K_u) + r*log(K_σ) + r*log(t) + log(bdg_constant(r)) + (2^(2*r-1) * K_u^(2*r) * t^(2*r)) + log(t^r * n^r + bdg_constant(r/2)) + (3^(r-1) * t^r * K_u^r)
+    return (r - 1) * log(6) +
+           5 * r / 2 * log(n) +
+           r * log(K_u) +
+           r * log(K_σ) +
+           r * log(t) +
+           log(bdg_constant(r)) +
+           (2^(2 * r - 1) * K_u^(2 * r) * t^(2 * r)) +
+           log(t^r * n^r + bdg_constant(r / 2)) +
+           (3^(r - 1) * t^r * K_u^r)
 end

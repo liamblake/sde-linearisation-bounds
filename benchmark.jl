@@ -27,4 +27,15 @@ end
 # println("sde_realisations")
 N = 10
 dest = Array{Float64}(undef, (2, N))
-@benchmark sde_realisations(dest, model.velocity!, σ!, N, 2, 2, model.x₀, model.t₀, model.T, 0.01)
+@benchmark sde_realisations(
+    dest,
+    model.velocity!,
+    σ!,
+    N,
+    2,
+    2,
+    model.x₀,
+    model.t₀,
+    model.T,
+    0.01,
+)

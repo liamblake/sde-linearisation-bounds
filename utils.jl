@@ -1,7 +1,7 @@
 
-using LinearAlgebra 
+using LinearAlgebra
 
-using Plots 
+using Plots
 
 """
 	save_figure(p, fname::String; show_print::Bool = true)
