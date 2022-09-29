@@ -26,6 +26,9 @@ end
 # Solving of SDE 
 # println("sde_realisations")
 N = 10
+x₀ = [1.0, 0.0]
+t₀ = 0.0
+T = 1.0
 dest = Array{Float64}(undef, (2, N))
 @benchmark sde_realisations(
     dest,
@@ -34,8 +37,8 @@ dest = Array{Float64}(undef, (2, N))
     N,
     2,
     2,
-    model.x₀,
-    model.t₀,
-    model.T,
+    x₀,
+    t₀,
+    T,
     0.01,
 )
