@@ -4,21 +4,6 @@ using LinearAlgebra
 using Plots
 
 """
-	save_figure(p, fname::String; show_print::Bool = true)
-
-Helper function to easily save plots to the same directory. If show_print is true, 
-then "Saving figure to OUTPUT" is printed in the terminal.
-"""
-function save_figure(p, fname::String; show_print::Bool = true)
-    path = "output/$(fname)"
-    if show_print
-        println("Saving figure to $(path)")
-    end
-    savefig(p, path)
-end
-
-
-"""
 	pnorm(A::AbstractArray, dims; p::Real = 2)
 
 """

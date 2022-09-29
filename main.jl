@@ -55,13 +55,26 @@ function convergence_validation(
     t₀::Float64,
     T::Float64,
     N::Int64;
+    save_plots::Bool = true,
+    quiet::Bool = false,
     attempt_reload::Bool = true,
     save_on_generation::Bool = true,
 )
     @unpack name, d, velocity!, ∇u, Kᵤ = model
 
     model_name = name
-    println("Validation for $(name) model...")
+    !quiet && println("Validation for $(name) model...")
+
+    # Helper function to save figures
+    function save_figure(p, fname::String; show_print::Bool = true)
+        if save_plots
+            path = "output/$(fname)"
+            if show_print
+                println("Saving figure to $(path)")
+            end
+            savefig(p, path)
+        end
+    end
 
     for x₀ in x₀s
         name = "$(model_name)_$(x₀)"
@@ -70,7 +83,7 @@ function convergence_validation(
         dt = 1e-6
 
         # Calculate the deterministic trajectory. This is needed to form the limiting velocity field 
-        println("Solving for deterministic trajectory...")
+        !quiet && println("Solving for deterministic trajectory...")
         det_prob = ODEProblem(velocity!, x₀, (t₀, T))
         det_sol = solve(det_prob, Euler(), dt = dt)
         w = last(det_sol.u)
@@ -119,7 +132,7 @@ function convergence_validation(
         # For storing simulations - pre-allocate once and reuse
         joint_rels = Array{Float64}(undef, (2 * d, N))
 
-        println("Generating realisations for values of ε...")
+        !quiet && println("Generating realisations for values of ε...")
         @showprogress for (i, ε) in enumerate(εs)
             # See the joint system description in the script docstring
             function σ!(dW, _, _, _)
@@ -369,7 +382,7 @@ function convergence_validation(
                 label = "Empirical",
             )
             save_figure(p, "$(name)/limiting_histogram.pdf")
-            println("Plotted $(N*nε) realisations of the limiting SDE")
+            !quiet && println("Plotted $(N*nε) realisations of the limiting SDE")
         end
     end
 
