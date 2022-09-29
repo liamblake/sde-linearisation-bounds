@@ -1,4 +1,5 @@
 using Parameters
+using StaticArrays
 
 @with_kw struct Model
     name::String
@@ -26,14 +27,11 @@ function ex_rossby()::Model
     # The velocity field, with an in-place update.
     # Much faster this way: 
     # https://diffeq.sciml.ai/stable/tutorials/faster_ode_example/#Example-Accelerating-a-Non-Stiff-Equation:-The-Lorenz-Equation
-    function rossby!(dx, x, _, t)
-        dx[1] =
-            c - A * sin(K * x[1]) * cos(x[2]) +
-            ϵ * l₁ * sin(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2])
-        dx[2] =
-            A * K * cos(K * x[1]) * sin(x[2]) +
-            ϵ * k₁ * cos(k₁ * (x[1] - c₁ * t)) * sin(l₁ * x[2])
-        nothing
+    function rossby(x, _, t)
+        dx₁ = c - A * sin(K * x[1]) * cos(x[2]) + ϵ * l₁ * sin(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2])
+        dx₂ = A * K * cos(K * x[1]) * sin(x[2]) + ϵ * k₁ * cos(k₁ * (x[1] - c₁ * t)) * sin(l₁ * x[2])
+		
+		return SA[dx₁, dx₂]
     end
 
 
@@ -55,7 +53,7 @@ function ex_rossby()::Model
         )
     Kᵤ = max(vel_bound, grad_bound)
 
-    return Model("rossby", 2, rossby!, ∇u, Kᵤ)
+    return Model("rossby", 2, rossby, ∇u, Kᵤ)
 end
 
 """

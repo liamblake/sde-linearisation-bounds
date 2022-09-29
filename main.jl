@@ -6,6 +6,7 @@ using LaTeXStrings
 using Parameters
 using Plots
 using ProgressMeter
+using StaticArrays
 
 include("covariance.jl")
 include("models.jl")
@@ -79,10 +80,10 @@ function convergence_validation(
         plot_histograms = (d == 2)
 
         # Set up as a joint system so the same noise realisation is used.
-        function joint_system!(dx, x, _, t)
-            velocity!(dx, x, NaN, t)
-            dx[(d+1):(2*d)] = ∇u(det_sol(t), t) * x[(d+1):(2*d)]
-            nothing
+        function joint_system(x, _, t)
+            v1 = velocity(x, NaN, t)
+			v2 = SArray{(d,d)}(∇u(det_sol(t), t) * x[(d+1):(2*d)])
+			return vcat(v1,v2)
         end
 
         # Plot the deterministic trajectory
@@ -122,8 +123,8 @@ function convergence_validation(
         println("Generating realisations for values of ε...")
         @showprogress for (i, ε) in enumerate(εs)
             # See the joint system description in the script docstring
-            function σ!(dW, _, _, _)
-                dW .= 0.0
+            function σ(_, _, _)
+				dW = SArray{(2*d, d), Float64}(0.0)
                 dW[diagind(dW)] .= ε
 
                 # TODO: Do not use a for loop here
@@ -131,7 +132,7 @@ function convergence_validation(
                     dW[d+j, j] = 1.0
                 end
 
-                nothing
+				return dW
             end
 
             # Simulate from the y equation and the limiting equation simultaneously
@@ -144,8 +145,8 @@ function convergence_validation(
             else
                 sde_realisations(
                     joint_rels,
-                    joint_system!,
-                    σ!,
+                    joint_system,
+                    σ,
                     N,
                     2 * d,
                     d,
@@ -386,7 +387,7 @@ function validate_all(
 
     ### Perturbed Rossby wave ###
     # Initial conditions
-    x₀s = [[0.0, 1.0]]#, [1.5, 1.0]]
+    x₀s = [SA[0.0, 1.0]]#, [1.5, 1.0]]
     # Time interval of interest
     t₀ = 0.0
     T = 1.0

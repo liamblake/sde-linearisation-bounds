@@ -5,18 +5,16 @@ Run various performance tests, using the BenchmarkTools pacakge.
 using Random
 
 using BenchmarkTools
+using StaticArrays
 
 include("main.jl")
 
 Random.seed!(128345)
 
 model = ex_rossby()
-function σ!(dW, _, _, _)
-    dW[1, 1] = 1.0
-    dW[2, 2] = 1.0
-    dW[1, 2] = 0.0
-    dW[2, 1] = 0.0
-    nothing
+function σ(_, _, _)
+	dW = SA[1.0 0.0; 0.0 1.0]
+	return dW
 end
 
 # Calculation of theoretical covariance matrix
@@ -33,7 +31,7 @@ dest = Array{Float64}(undef, (2, N))
 @benchmark sde_realisations(
     dest,
     model.velocity!,
-    σ!,
+    σ,
     N,
     2,
     2,
