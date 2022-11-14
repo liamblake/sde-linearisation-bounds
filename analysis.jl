@@ -309,7 +309,7 @@ function full_analysis(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_
     # Plot the difference between the realisations of the y SDE and w. Should be going to zero
     # as epsilon gets smaller. Use this to check whether the timestep size is not small enough.
     # Mainly for diagnostics.
-    p = scatter(log10.(εs), z_mean_diff, legend=false)
+    p = scatter(log10.(εs), log10.(z_mean_diff), legend=false)
     save_figure(p, "$(name)/diagnostics_z_mean.pdf")
 
 end
