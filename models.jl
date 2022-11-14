@@ -8,6 +8,11 @@ using Parameters
     Kᵤ::Float64
 end
 
+@with_kw struct SpaceTime
+    x₀::AbstractVector
+    t₀::Float64
+    T::Float64
+end
 
 """
 	ex_rossby()
@@ -24,7 +29,7 @@ function ex_rossby()::Model
     k₁ = 1.0
     ϵ = 0.3
     # The velocity field, with an in-place update.
-    # Much faster this way: 
+    # Much faster this way:
     # https://diffeq.sciml.ai/stable/tutorials/faster_ode_example/#Example-Accelerating-a-Non-Stiff-Equation:-The-Lorenz-Equation
     function rossby!(dx, x, _, t)
         dx[1] =
