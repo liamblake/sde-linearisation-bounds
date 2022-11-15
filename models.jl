@@ -1,4 +1,5 @@
 using Parameters
+using StaticArrays
 
 @with_kw struct Model
     name::String
@@ -9,7 +10,7 @@ using Parameters
 end
 
 @with_kw struct SpaceTime
-    x₀::AbstractVector
+    x₀::SVector
     t₀::Float64
     T::Float64
 end
@@ -23,14 +24,9 @@ function ex_rossby(σ!::Function; A=1.0, c=0.5, K=4.0, l₁=2.0, c₁=π, k₁=1
     # The velocity field, with an in-place update.
     # Much faster this way:
     # https://diffeq.sciml.ai/stable/tutorials/faster_ode_example/#Example-Accelerating-a-Non-Stiff-Equation:-The-Lorenz-Equation
-    function rossby!(dx, x, _, t)
-        dx[1] =
-            c - A * sin(K * x[1]) * cos(x[2]) +
-            ϵ * l₁ * sin(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2])
-        dx[2] =
-            A * K * cos(K * x[1]) * sin(x[2]) +
-            ϵ * k₁ * cos(k₁ * (x[1] - c₁ * t)) * sin(l₁ * x[2])
-        nothing
+    function rossby(x, _, t)
+        SA[c-A*sin(K * x[1])*cos(x[2])+ϵ*l₁*sin(k₁ * (x[1] - c₁ * t))*cos(l₁ * x[2]),
+            A*K*cos(K * x[1])*sin(x[2])+ϵ*k₁*cos(k₁ * (x[1] - c₁ * t))*sin(l₁ * x[2])]
     end
 
 
@@ -51,7 +47,7 @@ function ex_rossby(σ!::Function; A=1.0, c=0.5, K=4.0, l₁=2.0, c₁=π, k₁=1
             abs(A * K) + abs(ϵ * k₁ * l₁),
         )
 
-    return Model("rossby", 2, rossby!, ∇u, σ!)
+    return Model("rossby", 2, rossby, ∇u, σ!)
 end
 
 """
