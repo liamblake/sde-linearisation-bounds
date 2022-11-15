@@ -8,7 +8,7 @@ include("solve_sde.jl")
 include("analysis.jl")
 
 Random.seed!(3259245)
-GENERATE_DATA = true
+GENERATE_DATA = false
 
 # Specify the model, initial condition and time interval here
 model = ex_rossby()

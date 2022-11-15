@@ -5,6 +5,7 @@ using ProgressMeter
 
 """
 Generate N realisations of an SDE, filling a matrix of the final position in-place.
+Will use multithreading if available: Threads.nthreads()
 """
 function sde_realisations!(dest, vel!, σ!, N, d_y, d_W, y₀, t₀, T, dt)
     sde_prob = SDEProblem(vel!, σ!, y₀, (t₀, T), noise_rate_prototype=zeros(d_y, d_W))

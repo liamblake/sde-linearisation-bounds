@@ -6,7 +6,9 @@ using Random
 
 using BenchmarkTools
 
-include("main.jl")
+include("models.jl")
+include("covariance.jl")
+include("solve_sde.jl")
 
 Random.seed!(128345)
 
@@ -26,25 +28,13 @@ function σ!(dW, _, _, _)
 end
 
 # Calculation of theoretical covariance matrix
+println("nthreads: $(Threads.nthreads())")
 suite["Σ_calculation"] = @benchmarkable Σ_calculation(model, x₀, t₀, T, 0.001)
 
 # Solving of SDE
 N = 10
 dest = Array{Float64}(undef, (2, N))
-suite["sde_realisations"] = @benchmarkable sde_realisations(dest, model.velocity!, σ!, N, 2, 2, x₀, t₀, T, 0.01)
-
-# The full validation procedure (with no loading or saving)
-suite["convergence_validation"] = @benchmarkable convergence_validation(
-    model,
-    [x₀],
-    t₀,
-    T,
-    N,
-    quiet=true,
-    save_plots=false,
-    attempt_reload=false,
-    save_on_generation=false,
-)
+suite["sde_realisations"] = @benchmarkable sde_realisations!(dest, model.velocity!, σ!, N, 2, 2, x₀, t₀, T, 0.01)
 
 
 # Upon running/including this file, tune and run the benchmark suite
