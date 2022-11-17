@@ -78,39 +78,38 @@ function Σ_calculation(
     t₀::Real,
     T::Real,
     dt::Real,
+    dx::Real,
 )
     @unpack d, velocity!, ∇u = model
 
     ts = t₀:dt:T
+    nₜ = length(ts) - 1
     # Generate the required flow map data
     # First, advect the initial condition forward to obtain the final position
     prob = ODEProblem(velocity!, x₀, (t₀, T))
     det_sol = solve(prob, Euler(), dt=dt)
+    w = last(det_sol)
 
-    ∇u_F = t -> ∇u(det_sol(t), t)
 
     # Calculate the flow map gradients by solving the equation of variations directly
+    ∇u_F = t -> ∇u(det_sol(t), t)
     ∇Fs = Vector{Matrix{Float64}}(undef, length(ts))
     ∇F_eov!(∇Fs, ∇u_F, d, t₀, T, dt)
-    # ∇F_sol = ∇F_eov(∇u_F, d, t₀, T)
-    # ∇Fs = ∇F_sol.(ts)
 
     # Form the star grid around the final position
     # star = star_grid(w, dx)
 
-    # # Advect these points backwards to the initial time
+    # Advect these points backwards to the initial time
     # prob = ODEProblem(velocity!, star[1, :], (T, t₀))
-    # ensemble =
-    #     EnsembleProblem(prob, prob_func=(prob, i, _) -> remake(prob, u0=star[i, :]))
-    # sol =
-    #     solve(ensemble, Euler(), EnsembleThreads(), dt=dt, trajectories=2 * d)
+    # ensemble = EnsembleProblem(prob, prob_func=(prob, i, _) -> remake(prob, u0=star[i, :]))
+    # sol = solve(ensemble, Euler(), EnsembleThreads(), dt=dt, trajectories=2 * d)
 
-    # # Permute the dimensions of the ensemble solution so star_values is indexed
-    # # as (timestep, gridpoint, coordinate).
-    # star_values = Array{Float64}(undef, nₜ + 1, 2 * d, d)
+    # Permute the dimensions of the ensemble solution so star_values is indexed
+    # as (timestep, gridpoint, coordinate).
+    # star_values = Array{Float64}(undef, length(sol[1]), 2 * d, d)
     # permutedims!(star_values, Array(sol), [2, 3, 1])
 
-    # # Approximate the flow map gradient at each time step
+    # Approximate the flow map gradient at each time step
     # ∇Fs = ∇F.(eachslice(star_values, dims=1), d, dx)
 
     # TODO: Work with non-identity σ
@@ -124,6 +123,5 @@ function Σ_calculation(
 
     Σ = dt / 3 * (integrand[1] + 2 * sum(feven) + 4 * sum(fodd) + last(integrand))
 
-    # Tell Julia that the matrix is symmetric, to optimise operations like calculating eigenvalues.
-    return last(det_sol), Symmetric(Σ)
+    return last(det_sol), Σ
 end

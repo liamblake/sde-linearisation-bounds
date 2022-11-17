@@ -121,12 +121,12 @@ function add_lobf_to_plot!(
     end
 end
 
-function full_analysis(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, εs, rs, dt)
+function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, εs, rs, dt)
     @unpack x₀, t₀, T = space_time
     name = "$(model.name)_$(x₀)_[$(t₀),$(T)]"
 
     # Calculate the deviation covariance from the integral expression
-    w, Σ = Σ_calculation(model, x₀, t₀, T, dt)
+    w, Σ = Σ_calculation(model, x₀, t₀, T, dt, 0.0001)
 
     # Theoretical stochastic sensitivity - the maximum eigenvalue of Σ
     S2 = eigmax(Matrix(Σ), permute=false, scale=false)
@@ -163,13 +163,14 @@ function full_analysis(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_
         # Calculate empirical stochastic sensitivity
         sample_S2s[i] = eigmax(S_z, permute=false, scale=false)
 
+        println("ε = $(ε): $(s_mean_z)")
         for (j, r) in enumerate(rs)
             y_abs_diff[j, i] = mean(y_diffs .^ r)
             z_abs_diff[j, i] = mean(z_diffs .^ r)
         end
 
         if plot_histograms
-            # Plot a histogram of the realisations for the smallest value of ε
+            # Plot a histogram of the realisations
             p = histogram2d(
                 y_rels[i, 1, :],
                 y_rels[i, 2, :],
@@ -223,7 +224,7 @@ function full_analysis(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_
                 label="Theory",
             )
             p = bivariate_std_dev(
-                mean(z_rels, dims=2),
+                s_mean_z,
                 S_z,
                 nσ=2,
                 plt=p,
@@ -311,5 +312,38 @@ function full_analysis(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_
     # Mainly for diagnostics.
     p = scatter(log10.(εs), log10.(z_mean_diff), legend=false)
     save_figure(p, "$(name)/diagnostics_z_mean.pdf")
+
+end
+
+
+function many_points_plot(many_y_rels, model, space_times, ε, dt, xlim, ylim)
+    npoints = length(space_times)
+    @assert size(many_y_rels)[1] == npoints
+
+    # Calculate Σ for each point
+    p = plot()
+    for (i, st) in enumerate(space_times)
+        w, Σ = Σ_calculation(model, st.x₀, st.t₀, st.T, dt, 0.001)
+        histogram2d!(p, many_y_rels[i, 1, :], many_y_rels[i, 2, :], bins=100, c=cgrad(PALETTE, rev=true), legend=false)
+        p = bivariate_std_dev(
+            w,
+            ε^2 * Σ,
+            nσ=2,
+            plt=p,
+            colour=:black,
+            linestyle=:solid,
+        )
+    end
+    xlims!(p, xlim)
+    ylims!(p, ylim)
+
+    save_figure(p, "$(model.name)_$(x₀)_many.pdf")
+end
+
+
+function S²_field_plot(x₀_grid, model, t₀, T, dt, dx)
+    S² = x -> opnorm(Σ_calculation(model, x, t₀, T, dt, dx)[2])
+    S²_grid = S².(x₀_grid)
+
 
 end

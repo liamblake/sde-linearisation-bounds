@@ -5,7 +5,7 @@ using Parameters
     d::UInt8
     velocity!::Function
     ∇u::Function
-    Kᵤ::Float64
+    σ!::Function
 end
 
 @with_kw struct SpaceTime
@@ -19,7 +19,7 @@ end
 
 Two dimensional example: perturbed Rossby wave.
 """
-function ex_rossby()::Model
+function ex_rossby(σ!::Function)::Model
     # Velocity field parameters
     A = 1.0
     c = 0.5
@@ -58,9 +58,8 @@ function ex_rossby()::Model
             abs(A * K^2) + abs(ϵ * k₁ * l₁),
             abs(A * K) + abs(ϵ * k₁ * l₁),
         )
-    Kᵤ = max(vel_bound, grad_bound)
 
-    return Model("rossby", 2, rossby!, ∇u, Kᵤ)
+    return Model("rossby", 2, rossby!, ∇u, σ!)
 end
 
 """
