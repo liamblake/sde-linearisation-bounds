@@ -121,15 +121,10 @@ function add_lobf_to_plot!(
     end
 end
 
-function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, εs, rs, dt)
+function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, εs, dts, rs)
     @unpack x₀, t₀, T = space_time
     name = "$(model.name)_$(x₀)_[$(t₀),$(T)]"
 
-    # Calculate the deviation covariance from the integral expression
-    w, Σ = Σ_calculation(model, x₀, t₀, T, dt, 0.0001)
-
-    # Theoretical stochastic sensitivity - the maximum eigenvalue of Σ
-    S2 = eigmax(Matrix(Σ), permute=false, scale=false)
 
     nε = length(εs)
     nr = length(rs)
@@ -138,13 +133,26 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
     y_abs_diff = Array{Float64}(undef, (nr, nε))
     z_abs_diff = Array{Float64}(undef, (nr, nε))
     z_mean_diff = Vector{Float64}(undef, nε)
+    y_mean_diff = Vector{Float64}(undef, nε)
     sample_S2s = Vector{Float64}(undef, nε)
 
     # Only plot histograms if working in 2D
     plot_histograms = (model.d == 2)
 
+    S2 = 0.0
+
     for (i, ε) in enumerate(εs)
+        # Calculate the deviation covariance from the integral expression
+        # This is repeated for each value of ε, since the realisations were generated using a
+        # different step size for each value. Otherwise, the mean of the realisations and the
+        # determinstic solution do not match up, due to differing accuracies.
+        w, Σ = Σ_calculation(model, x₀, t₀, T, dts[i], 0.0001)
+        # Theoretical stochastic sensitivity - the maximum eigenvalue of Σ
+        S2 = opnorm(Matrix(Σ))
+        # TODO: Why am I recalculating this every time?
+
         # Diagnostics - mean should be zero
+        y_mean_diff[i] = mean(pnorm(y_rels[i, :, :] .- w, dims=1))
         z_mean_diff[i] = mean(pnorm(z_rels[i, :, :], dims=1))
 
         # Calculate the normed distance between each pair of realisations
@@ -155,13 +163,13 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
         # in order to estimate 𝔼[|z_ε - z|ʳ]
         z_diffs = pnorm(z_rels[i, :, :] .- gauss_z_rels[i, :, :], dims=1)
 
-        # Calculate the sample covariance matrix
+        # Calculate the sample covariance matrices
         s_mean_y = mean(y_rels[i, :, :], dims=2)
-        S_y = 1 / (N - 1) .* (y_rels[i, :, :] .- s_mean_y) * (y_rels[i, :, :] .- s_mean_y)'
+        S_y = cov(y_rels[i, :, :], dims=2)
         s_mean_z = mean(z_rels[i, :, :], dims=2)
-        S_z = 1 / (N - 1) .* (z_rels[i, :, :] .- s_mean_z) * (z_rels[i, :, :] .- s_mean_z)'
+        S_z = cov(z_rels[i, :, :], dims=2)
         # Calculate empirical stochastic sensitivity
-        sample_S2s[i] = eigmax(S_z, permute=false, scale=false)
+        sample_S2s[i] = opnorm(S_z)
 
         println("ε = $(ε): $(s_mean_z)")
         for (j, r) in enumerate(rs)
@@ -180,7 +188,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
                 legend=false,
                 cbar=true,
                 c=cgrad(PALETTE, rev=true),
-                label="",
+                label="", grid=false
             )
             p = bivariate_std_dev(
                 w,
@@ -213,6 +221,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
                 cbar=true,
                 c=cgrad(PALETTE, rev=true),
                 label="",
+                grid=false
             )
             p = bivariate_std_dev(
                 [0, 0],
@@ -245,7 +254,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
             vals,
             xlabel=L"\log{\,\varepsilon}",
             ylabel=L"\log{\,\Gamma_y^{(%$r)}(\varepsilon)}",
-            legend=false,
+            legend=false, grid=false
         )
         save_figure(p, "$(name)/y_diff_$(r).pdf")
 
@@ -264,7 +273,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
             vals,
             xlabel=L"\log{\,\varepsilon}",
             ylabel=L"\log{\,\Gamma_z^{(%$r)}(\varepsilon)}",
-            legend=false,
+            legend=false, grid=false
         )
         save_figure(p, "$(name)/z_diff_$(r).pdf")
 
@@ -286,7 +295,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
         abs_S2_diff,
         legend=false,
         xlabel=L"\log{\,\varepsilon}",
-        ylabel=L"\Gamma_{S^2}(\varepsilon)",
+        ylabel=L"\Gamma_{S^2}(\varepsilon)", grid=false
     )
     save_figure(p, "$(name)/s2_diff.pdf")
 
@@ -296,6 +305,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
         legend=false,
         xlabel=L"\log{\,\varepsilon}",
         ylabel=L"\log{\,\Gamma_{S^2}(\varepsilon)}",
+        grid=false
     )
     save_figure(p, "$(name)/s2_diff_log.pdf")
 
@@ -308,42 +318,48 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
     save_figure(p, "$(name)/s2_diff_log_lobf.pdf")
 
     # Plot the difference between the realisations of the y SDE and w. Should be going to zero
-    # as epsilon gets smaller. Use this to check whether the timestep size is not small enough.
-    # Mainly for diagnostics.
-    p = scatter(log10.(εs), log10.(z_mean_diff), legend=false)
-    save_figure(p, "$(name)/diagnostics_z_mean.pdf")
+    # as epsilon gets smaller.
+    p = scatter(log10.(εs), log10.(y_mean_diff), xlabel=L"\log{\,\varepsilon}", ylabel=L"\log{\,\Gamma_{E}(\varepsilon)}", legend=false, grid=false)
+    add_lobf_to_plot!(
+        p,
+        log10.(εs),
+        log10.(y_mean_diff),
+        annotation=slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}"
+    )
+    save_figure(p, "$(name)/y_mean.pdf")
 
+    p = scatter(log10.(εs), log10.(z_mean_diff), xlabel=L"\log{\,\varepsilon}", ylabel=L"\log{\,\Gamma_{E}(\varepsilon)}", legend=false, grid=false)
+    add_lobf_to_plot!(
+        p,
+        log10.(εs),
+        log10.(z_mean_diff),
+        annotation=slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}"
+    )
+    save_figure(p, "$(name)/z_mean.pdf")
 end
 
 
-function many_points_plot(many_y_rels, model, space_times, ε, dt, xlim, ylim)
-    npoints = length(space_times)
-    @assert size(many_y_rels)[1] == npoints
+# function many_points_plot(many_y_rels, model, space_times, ε, dt, xlim, ylim)
+#     npoints = length(space_times)
+#     @assert size(many_y_rels)[1] == npoints
 
-    # Calculate Σ for each point
-    p = plot()
-    for (i, st) in enumerate(space_times)
-        w, Σ = Σ_calculation(model, st.x₀, st.t₀, st.T, dt, 0.001)
-        histogram2d!(p, many_y_rels[i, 1, :], many_y_rels[i, 2, :], bins=100, c=cgrad(PALETTE, rev=true), legend=false)
-        p = bivariate_std_dev(
-            w,
-            ε^2 * Σ,
-            nσ=2,
-            plt=p,
-            colour=:black,
-            linestyle=:solid,
-        )
-    end
-    xlims!(p, xlim)
-    ylims!(p, ylim)
+#     # Calculate Σ for each point
+#     p = plot()
+#     for (i, st) in enumerate(space_times)
+#         w, Σ = Σ_calculation(model, st.x₀, st.t₀, st.T, dt, 0.001)
+#         histogram2d!(p, many_y_rels[i, 1, :], many_y_rels[i, 2, :], bins=100, c=cgrad(PALETTE, rev=true), legend=false, grid=false)
 
-    save_figure(p, "$(model.name)_$(x₀)_many.pdf")
-end
+#         p = bivariate_std_dev(
+#             w,
+#             ε^2 * Σ,
+#             nσ=2,
+#             plt=p,
+#             colour=:black,
+#             linestyle=:solid,
+#         )
+#     end
+#     xlims!(p, xlim)
+#     ylims!(p, ylim)
 
-
-function S²_field_plot(x₀_grid, model, t₀, T, dt, dx)
-    S² = x -> opnorm(Σ_calculation(model, x, t₀, T, dt, dx)[2])
-    S²_grid = S².(x₀_grid)
-
-
-end
+#     save_figure(p, "$(model.name)_$(x₀)_many.pdf")
+# end

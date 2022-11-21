@@ -83,13 +83,11 @@ function Σ_calculation(
     @unpack d, velocity!, ∇u = model
 
     ts = t₀:dt:T
-    nₜ = length(ts) - 1
     # Generate the required flow map data
     # First, advect the initial condition forward to obtain the final position
     prob = ODEProblem(velocity!, x₀, (t₀, T))
     det_sol = solve(prob, Euler(), dt=dt)
     w = last(det_sol)
-
 
     # Calculate the flow map gradients by solving the equation of variations directly
     ∇u_F = t -> ∇u(det_sol(t), t)
@@ -123,5 +121,5 @@ function Σ_calculation(
 
     Σ = dt / 3 * (integrand[1] + 2 * sum(feven) + 4 * sum(fodd) + last(integrand))
 
-    return last(det_sol), Σ
+    return w, Σ
 end

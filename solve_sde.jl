@@ -27,7 +27,7 @@ end
 
 Generate realisations of the SDE solution and the limiting solution.
 """
-function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model, space_time::SpaceTime, N::Int64, εs::AbstractVector; dt=nothing, quiet=false)
+function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model, space_time::SpaceTime, N::Int64, εs::AbstractVector, dts::AbstractVector; quiet=false)
     @unpack name, d, velocity!, ∇u, σ! = model
     @unpack x₀, t₀, T = space_time
     nε = length(εs)
@@ -35,18 +35,13 @@ function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model
     # Ensure destination is of the the expected size
     @assert size(y_dest) == size(z_dest) == size(gauss_z_dest) == size(gauss_y_dest) == (nε, d, N)
 
-    # Use dt = min(εs) / 100 if not specified
-    if dt === nothing
-        dt = minimum(εs) / 100.0
-    end
-
     # For storing simulations - pre-allocate once and reuse
     joint_rels = Array{Float64}(undef, (2 * d, N))
 
     # Calculate the deterministic trajectory. This is needed to form the limiting velocity field
     !quiet && println("Solving for deterministic trajectory...")
     det_prob = ODEProblem(velocity!, x₀, (t₀, T))
-    det_sol = solve(det_prob, Euler(), dt=minimum(εs) / 100.0)
+    det_sol = solve(det_prob, Euler(), dt=minimum(dts))
     w = last(det_sol.u)
 
     # Set up as a joint system so the same noise realisation is used.
@@ -58,7 +53,7 @@ function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model
 
     !quiet && println("Generating realisations for values of ε...")
     @showprogress for (i, ε) in enumerate(εs)
-        dt = ε / 100.0
+        dt = dts[i]
         # Diffusion matrix for the joint system
         function joint_σ!(dW, x, _, t)
             # Original SDE
@@ -96,7 +91,9 @@ function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model
         # Store the realisations appropriately
         y_dest[i, :, :] .= joint_rels[1:d, :]
         gauss_z_dest[i, :, :] .= joint_rels[(d+1):(2*d), :]
-        z_dest[i, :, :] .= (y_dest[i, :, :] .- w) / ε
+        z_dest[i, :, :] .= (y_dest[i, :, :] .- w) ./ ε
+        # Note the calculation in log-scale
+        # z_dest[i, :, :] .= sign.(y_dest[i, :, :] .- w) .* exp.(log.(abs.(y_dest[i, :, :] .- w)) .- log.(ε))
         gauss_y_dest[i, :, :] .= ε * z_dest[i, :, :] .+ w
 
     end
