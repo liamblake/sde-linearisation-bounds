@@ -36,53 +36,66 @@ function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model
     @assert size(y_dest) == size(z_dest) == size(gauss_z_dest) == size(gauss_y_dest) == (nε, d, N)
 
     # For storing simulations - pre-allocate once and reuse
-    joint_rels = Array{Float64}(undef, (2 * d, N))
+    joint_rels = Array{Float64}(undef, (3 * d, N))
 
-    # Calculate the deterministic trajectory. This is needed to form the limiting velocity field
+    # Calculate the deterministic trajectory. This is needed to generate directly from the SDE satisfied by z, and to form the limiting velocity field
     !quiet && println("Solving for deterministic trajectory...")
     det_prob = ODEProblem(velocity!, x₀, (t₀, T))
     det_sol = solve(det_prob, Euler(), dt=minimum(dts))
     w = last(det_sol.u)
 
-    # Set up as a joint system so the same noise realisation is used.
-    function joint_system!(dx, x, _, t)
-        velocity!(dx, x, NaN, t)
-        dx[(d+1):(2*d)] = ∇u(det_sol(t), t) * x[(d+1):(2*d)]
-        nothing
-    end
 
     !quiet && println("Generating realisations for values of ε...")
     @showprogress for (i, ε) in enumerate(εs)
         dt = dts[i]
+        # Set up as a joint system so the same noise realisation is used.
+        # TODO: There are probably some clever tricks to avoid new allocations each time - maybe carry
+        # F and u_F as state variables?
+        function joint_system!(dx, x, _, t)
+            F = det_sol(t)
+
+            # y^ε equation
+            velocity!(dx[1:(2*d)], x[1:(2*d)], nothing, t)
+
+            # Limiting equation
+            dx[(2*d+1):(3*d)] = ∇u(det_sol(t), t) * x[(2*d+1):(3*d)]
+            u_F = Vector{Float64}(undef, d)
+            velocity!(u_F, F, nothing, t)
+            dx[(d+1):(2*d)] -= u_F
+            dx[(d+1):(2*d)] *= 1 / ε
+
+            # z^ε equation
+            velocity!(dx[(d+1):(2*d)], ε * x[(d+1):(2*d)] + F, nothing, t)
+
+            nothing
+        end
+
         # Diffusion matrix for the joint system
         function joint_σ!(dW, x, _, t)
-            # Original SDE
-            # dW .= 0.0
-            # σ!(dW[1:d, :], x, nothing, t)
-            # dW[1:d, :] *= ε
-
-            # # Linearised SDE
-            # σ!(dW[(d+1):(2*d), :], det_sol(t), nothing, t)
-
             dW .= 0.0
             # TODO: Do not use a for loop here
             for j = 1:d
+                # y^ε
                 dW[j, j] = ε
+                # z^ε
                 dW[d+j, j] = 1.0
+                # z
+                dW[d+2*j, j] = 1.0
             end
 
             nothing
         end
 
-        # Simulate from the y equation and the limiting equation simultaneously
+        # Simulate from the y equation, the z equation and the limiting equation simultaneously.
+        # This ensures the same realisation of the Wiener process Wₜ is used for each.
         sde_realisations!(
             joint_rels,
             joint_system!,
             joint_σ!,
             N,
-            2 * d,
+            3 * d,
             d,
-            vcat(x₀, zeros(d)),
+            vcat(x₀, zeros(2 * d)),
             t₀,
             T,
             dt,
@@ -90,11 +103,9 @@ function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model
 
         # Store the realisations appropriately
         y_dest[i, :, :] .= joint_rels[1:d, :]
-        gauss_z_dest[i, :, :] .= joint_rels[(d+1):(2*d), :]
-        z_dest[i, :, :] .= (y_dest[i, :, :] .- w) ./ ε
-        # Note the calculation in log-scale
-        # z_dest[i, :, :] .= sign.(y_dest[i, :, :] .- w) .* exp.(log.(abs.(y_dest[i, :, :] .- w)) .- log.(ε))
-        gauss_y_dest[i, :, :] .= ε * z_dest[i, :, :] .+ w
+        z_dest[i, :, :] .= joint_rels[(d+1):(2*d), :] #(y_dest[i, :, :] .- w) ./ ε
+        gauss_z_dest[i, :, :] .= joint_rels[(2*d+1):(3*d), :]
+        gauss_y_dest[i, :, :] .= ε * gauss_z_dest[i, :, :] .+ w
 
     end
 

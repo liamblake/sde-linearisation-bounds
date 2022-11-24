@@ -45,7 +45,7 @@ model = ex_rossby(σ_id!)
 space_time = SpaceTime([0.0, 1.0], 0.0, 1.0)
 
 # The number of realisations to work with (overwritten if loading data)
-N = 10000
+N = 100
 
 rs = [1, 2, 3, 4]
 εs = [0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001]
