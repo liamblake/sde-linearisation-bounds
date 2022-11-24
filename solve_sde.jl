@@ -55,17 +55,17 @@ function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model
             F = det_sol(t)
 
             # y^ε equation
-            velocity!(dx[1:(2*d)], x[1:(2*d)], nothing, t)
+            velocity!(@view(dx[1:d]), x[1:d], nothing, t)
 
-            # Limiting equation
-            dx[(2*d+1):(3*d)] = ∇u(det_sol(t), t) * x[(2*d+1):(3*d)]
+            # z^ε equation
             u_F = Vector{Float64}(undef, d)
             velocity!(u_F, F, nothing, t)
+            velocity!(@view(dx[(d+1):(2*d)]), ε * x[(d+1):(2*d)] + F, nothing, t)
             dx[(d+1):(2*d)] -= u_F
             dx[(d+1):(2*d)] *= 1 / ε
 
-            # z^ε equation
-            velocity!(dx[(d+1):(2*d)], ε * x[(d+1):(2*d)] + F, nothing, t)
+            # Limiting equation
+            dx[(2*d+1):(3*d)] = ∇u(det_sol(t), t) * x[(2*d+1):(3*d)]
 
             nothing
         end
