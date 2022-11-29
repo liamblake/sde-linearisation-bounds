@@ -32,7 +32,7 @@ function ex_rossby(σ!::Function; A=1.0, c=0.5, K=4.0, l₁=2.0, c₁=π, k₁=1
 
     # The velocity gradient matrix is known exactly
     ∇u =
-        (x, t) -> [
+        (x, t) -> SA[
             -A*K*cos(K * x[1])*cos(x[2])+ϵ*k₁*l₁*cos(k₁ * (x[1] - c₁ * t))*cos(l₁ * x[2]) A*sin(K * x[1])*sin(x[2])-ϵ*l₁^2*sin(k₁ * (x[1] - c₁ * t))*sin(l₁ * x[2])
             -A*K^2*sin(K * x[1])*sin(x[2])-ϵ*k₁^2*sin(k₁ * (x[1] - c₁ * t))*sin(l₁ * x[2]) A*K*cos(K * x[1])*cos(x[2])+ϵ*k₁*l₁*cos(k₁ * (x[1] - c₁ * t))*cos(l₁ * x[2])
         ]

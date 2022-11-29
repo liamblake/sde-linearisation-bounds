@@ -9,7 +9,8 @@ Generate N realisations of an SDE, filling a matrix of the final position in-pla
 Will use multithreading if available: Threads.nthreads()
 """
 function sde_realisations!(dest, vel!, σ!, N, d_y, d_W, y₀, t₀, T, dt)
-    sde_prob = SDEProblem(vel!, σ!, y₀, (t₀, T), noise_rate_prototype=zeros(d_y, d_W))
+    nrp = @SArray(zeros(d_y, d_W))
+    sde_prob = SDEProblem(vel!, σ!, y₀, (t₀, T), noise_rate_prototype=nrp)
 
     # This function will be called on the output of each realisation when solving the
     # EnsembleProblem. Here, we take the final position of the solution and place it
@@ -47,7 +48,7 @@ function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model
 
     # Set up as a joint system so the same noise realisation is used.
     function joint_system(x, _, t)
-        vcat(velocity!(dx, x, NaN, t), SVector{d}(∇u(det_sol(t), t) * x[(d+1):(2*d)]))
+        @SVector[velocity!(x, NaN, t)..., mul(∇u(det_sol(t), t), x[(d+1):(2*d)])...]
     end
 
     !quiet && println("Generating realisations for values of ε...")
@@ -72,7 +73,7 @@ function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model
             N,
             2 * d,
             d,
-			SA[x₀..., zeros(d)...],
+            SA[x₀..., zeros(d)...],
             t₀,
             T,
             dt,
