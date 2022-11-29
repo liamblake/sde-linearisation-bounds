@@ -80,7 +80,7 @@ end
 
 # Perform the analysis, generating and saving all appropriate plots
 println("Calculating and generating plots...")
-theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, εs, dts, rs)
+theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, εs, dts, rs, legend_idx=2)
 
 
 # ################## Many initial conditions ##################
@@ -127,26 +127,28 @@ ys = 0:0.01:π
 x₀_grid = reshape([collect(pairs) for pairs in Base.product(xs, ys)][:], length(xs), length(ys))
 
 t₀ = 0.0
+T = 1.0
 dt = 0.01
 dx = 0.001
 
-# Pick a value of ε
-ε = 1 / sqrt(50000)
+# Pick a cut-off value
+cutoff = 25.0
 
 # Repeat for several T values
-for T in [1.0, 2.5]
+for ϵ in [0.0, 0.3]
     # T = 2.5
+    model = ex_rossby(σ_id!, ϵ=ϵ)
     S² = x -> opnorm(Σ_calculation(model, x, t₀, T, dt, dx)[2])
     S²_grid = S².(x₀_grid)'
 
     # Interpolate the scalar field for visualisation purposes
     p = heatmap(xs, ys, log.(S²_grid), xlabel=L"x_1", ylabel=L"x_2")
-    savefig(p, "output/s2_field_$(T).pdf")
+    savefig(p, "output/s2_field_$(ϵ).pdf")
 
     # Extract robust sets and plot
-    R = S²_grid .< 0.02^2 / ε^2
+    R = S²_grid .< cutoff
     p = heatmap(xs, ys, R, xlabel=L"x_1", ylabel=L"x_2", c=cgrad([:white, :lightskyblue]), cbar=false)
-    savefig(p, "output/s2_robust_$(T).pdf")
+    savefig(p, "output/s2_robust_$(ϵ).pdf")
 end
 
 

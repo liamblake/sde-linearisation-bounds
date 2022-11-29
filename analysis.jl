@@ -40,7 +40,7 @@ Plot the n standard-deviation regions of a bivariate Gaussian distribution
 with mean μ and covariance matrix Σ. The number of regions plotted is specified
 by nσ.
 """
-function bivariate_std_dev(μ, Σ; nσ=1, plt=plot(), colour=:black, args...)
+function bivariate_std_dev(μ, Σ; nσ=1, plt=plot(), colour=:black, label="", args...)
     # Calculate the first two principal axes of the covariance matrix
     # These correspond to the major and minor axes of the ellipse
     evals, evecs = eigen(Σ)
@@ -59,7 +59,7 @@ function bivariate_std_dev(μ, Σ; nσ=1, plt=plot(), colour=:black, args...)
         x = t -> n * (a * cos(t) * cos(θ) - b * sin(t) * sin(θ)) + μ[1]
         y = t -> n * (a * cos(t) * sin(θ) + b * sin(t) * cos(θ)) + μ[2]
 
-        plot!(x, y, 0, 2π, linecolor=colour; args...)
+        plot!(x, y, 0, 2π, linecolor=colour, label=(n == 1) ? label : ""; args...)
     end
 
     # Also plot the mean
@@ -121,7 +121,7 @@ function add_lobf_to_plot!(
     end
 end
 
-function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, εs, dts, rs)
+function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, εs, dts, rs; legend_idx=1)
     @unpack x₀, t₀, T = space_time
     name = "$(model.name)_$(x₀)_[$(t₀),$(T)]"
 
@@ -185,7 +185,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
                 bins=100,
                 xlabel=L"y_1",
                 ylabel=L"y_2",
-                legend=false,
+                legend=(i == legend_idx),
                 cbar=true,
                 c=cgrad(PALETTE, rev=true),
                 label="", grid=false
@@ -193,7 +193,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
             p = bivariate_std_dev(
                 w,
                 ε^2 * Σ,
-                nσ=2,
+                nσ=3,
                 plt=p,
                 colour=:black,
                 linestyle=:solid,
@@ -202,7 +202,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
             p = bivariate_std_dev(
                 s_mean_y,
                 S_y,
-                nσ=2,
+                nσ=3,
                 plt=p,
                 colour=:red,
                 linestyle=:dash,
@@ -217,7 +217,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
                 bins=100,
                 xlabel=L"z_1",
                 ylabel=L"z_2",
-                legend=false,
+                legend=(i == legend_idx),
                 cbar=true,
                 c=cgrad(PALETTE, rev=true),
                 label="",
@@ -226,7 +226,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
             p = bivariate_std_dev(
                 [0, 0],
                 Σ,
-                nσ=2,
+                nσ=3,
                 plt=p,
                 colour=:black,
                 linestyle=:solid,
@@ -235,7 +235,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
             p = bivariate_std_dev(
                 s_mean_z,
                 S_z,
-                nσ=2,
+                nσ=3,
                 plt=p,
                 colour=:red,
                 linestyle=:dash,

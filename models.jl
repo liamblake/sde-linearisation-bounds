@@ -19,15 +19,7 @@ end
 
 Two dimensional example: perturbed Rossby wave.
 """
-function ex_rossby(σ!::Function)::Model
-    # Velocity field parameters
-    A = 1.0
-    c = 0.5
-    K = 4.0
-    l₁ = 2.0
-    c₁ = π
-    k₁ = 1.0
-    ϵ = 0.3
+function ex_rossby(σ!::Function; A=1.0, c=0.5, K=4.0, l₁=2.0, c₁=π, k₁=1.0, ϵ=0.3)::Model
     # The velocity field, with an in-place update.
     # Much faster this way:
     # https://diffeq.sciml.ai/stable/tutorials/faster_ode_example/#Example-Accelerating-a-Non-Stiff-Equation:-The-Lorenz-Equation
