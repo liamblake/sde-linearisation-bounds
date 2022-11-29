@@ -5,6 +5,7 @@ Run various performance tests, using the BenchmarkTools pacakge.
 using Random
 
 using BenchmarkTools
+using StaticArrays
 
 include("models.jl")
 include("covariance.jl")
@@ -16,15 +17,11 @@ suite = BenchmarkGroup()
 
 # An example SDE model
 model = ex_rossby()
-x₀ = [1.0, 0.0]
+x₀ = SA[1.0, 0.0]
 t₀ = 0.0
 T = 1.0
-function σ!(dW, _, _, _)
-    dW[1, 1] = 1.0
-    dW[2, 2] = 1.0
-    dW[1, 2] = 0.0
-    dW[2, 1] = 0.0
-    nothing
+function σ!(_, _, _)
+    SA[1.0 0.0; 0.0 1.0]
 end
 
 # Calculation of theoretical covariance matrix

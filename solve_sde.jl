@@ -2,13 +2,15 @@ using DifferentialEquations
 using LaTeXStrings
 using Parameters
 using ProgressMeter
+using StaticArrays
 
 """
 Generate N realisations of an SDE, filling a matrix of the final position in-place.
 Will use multithreading if available: Threads.nthreads()
 """
 function sde_realisations!(dest, vel!, σ!, N, d_y, d_W, y₀, t₀, T, dt)
-    sde_prob = SDEProblem(vel!, σ!, y₀, (t₀, T), noise_rate_prototype=zeros(d_y, d_W))
+    nrp = @SArray(zeros(d_y, d_W))
+    sde_prob = SDEProblem(vel!, σ!, y₀, (t₀, T), noise_rate_prototype=nrp)
 
     # This function will be called on the output of each realisation when solving the
     # EnsembleProblem. Here, we take the final position of the solution and place it
@@ -45,44 +47,33 @@ function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model
     w = last(det_sol.u)
 
     # Set up as a joint system so the same noise realisation is used.
-    function joint_system!(dx, x, _, t)
-        velocity!(dx, x, NaN, t)
-        dx[(d+1):(2*d)] = ∇u(det_sol(t), t) * x[(d+1):(2*d)]
-        nothing
+    function joint_system(x, _, t)
+        @SVector[velocity!(x, NaN, t)..., mul(∇u(det_sol(t), t), x[(d+1):(2*d)])...]
     end
 
     !quiet && println("Generating realisations for values of ε...")
     @showprogress for (i, ε) in enumerate(εs)
         dt = dts[i]
         # Diffusion matrix for the joint system
-        function joint_σ!(dW, x, _, t)
-            # Original SDE
-            # dW .= 0.0
-            # σ!(dW[1:d, :], x, nothing, t)
-            # dW[1:d, :] *= ε
-
-            # # Linearised SDE
-            # σ!(dW[(d+1):(2*d), :], det_sol(t), nothing, t)
-
-            dW .= 0.0
+        function σ(_, _, _)
+            dW = zeros(2 * d, d)
             # TODO: Do not use a for loop here
             for j = 1:d
                 dW[j, j] = ε
                 dW[d+j, j] = 1.0
             end
-
-            nothing
+            return SArray{2 * d,d}(dW)
         end
 
         # Simulate from the y equation and the limiting equation simultaneously
         sde_realisations!(
             joint_rels,
-            joint_system!,
-            joint_σ!,
+            joint_system,
+            σ,
             N,
             2 * d,
             d,
-            vcat(x₀, zeros(d)),
+            SA[x₀..., zeros(d)...],
             t₀,
             T,
             dt,
