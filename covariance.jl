@@ -41,7 +41,7 @@ function ∇F(star_values, n, δx)
 end
 
 """
-∇F_eov!(dest::AbstractVector, ∇u::Function, d::UInt8, t₀::Real, T::Real, dt::Real)
+    ∇F_eov!(dest, ∇u, d, t₀, T, dt)
 
 Calculate the flow map gradient by directly solving the equation of variations,
 given the corresponding trajectory. The equation of variations is
@@ -64,35 +64,23 @@ function ∇F_eov!(dest, ∇u, d, t₀, T, dt)
     u₀ = SMatrix{d,d}(Id)
 
     prob = ODEProblem(rate, u₀, (t₀, T))
-    dest[:] = solve(prob, saveat=dt).u
+    dest[:] = solve(prob, saveat = dt).u
 
 end
 
 """
-	Σ_calculation(
-        model,
-        x₀,
-        t₀,
-        T,
-        dt,
-    )
+	Σ_calculation(model, x₀, t₀, T, dt)
 
 Calculate the deviation covariance matrix Σ with an in-place specification of the velocity field.
 """
-function Σ_calculation(
-    model,
-    x₀,
-    t₀,
-    T,
-    dt,
-)
+function Σ_calculation(model, x₀, t₀, T, dt)
     @unpack d, velocity, ∇u = model
 
     ts = t₀:dt:T
     # Generate the required flow map data
     # First, advect the initial condition forward to obtain the final position
     prob = ODEProblem(velocity, x₀, (t₀, T))
-    det_sol = solve(prob, Euler(), dt=dt)
+    det_sol = solve(prob, Euler(), dt = dt)
     w = last(det_sol)
 
     # Calculate the flow map gradients by solving the equation of variations directly
