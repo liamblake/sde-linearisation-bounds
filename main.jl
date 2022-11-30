@@ -14,7 +14,7 @@ Random.seed!(3259245)
 """
 
 """
-function generate_or_load!(generate::Bool, y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, N, εs, dts, data_fname::String)
+function generate_or_load!(generate, y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, N, εs, dts, data_fname)
     if generate
         # Solve the SDE to generate new data
         generate_data!(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, N, εs, dts)
@@ -45,7 +45,7 @@ model = ex_rossby(σ_id!)
 space_time = SpaceTime(SA[0.0, 1.0], 0.0, 1.0)
 
 # The number of realisations to work with (overwritten if loading data)
-N = 100
+N = 10000
 
 rs = [1, 2, 3, 4]
 εs = [0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001]
@@ -61,7 +61,7 @@ z_rels = Array{Float64}(undef, length(εs), model.d, N)
 gauss_z_rels = Array{Float64}(undef, length(εs), model.d, N)
 gauss_y_rels = Array{Float64}(undef, length(εs), model.d, N)
 
-GENERATE = false
+GENERATE = true
 generate_or_load!(GENERATE, y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, N, εs, dts, data_fname)
 # Overwrite the number of realisations with whatever is in the file
 Nn = size(y_rels)[3]
@@ -72,7 +72,7 @@ end
 
 # Perform the analysis, generating and saving all appropriate plots
 println("Calculating and generating plots...")
-theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, εs, dts, rs, legend_idx=2)
+theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, εs, dts, rs, legend_idx = 2)
 
 
 
@@ -93,16 +93,18 @@ cutoff = 70.0
 # Repeat for several T values
 for ϵ in [0.0, 0.3]
     # T = 2.5
-    model = ex_rossby(σ_id!, ϵ=ϵ)
+    model = ex_rossby(σ_id!, ϵ = ϵ)
     S² = x -> opnorm(Σ_calculation(model, x, t₀, T, dt)[2])
+    hls
+
     S²_grid = S².(x₀_grid)'
 
     # Interpolate the scalar field for visualisation purposes
-    p = heatmap(xs, ys, log.(S²_grid), xlabel=L"x_1", ylabel=L"x_2")
+    p = heatmap(xs, ys, log.(S²_grid), xlabel = L"x_1", ylabel = L"x_2")
     savefig(p, "output/s2_field_$(ϵ).pdf")
 
     # Extract robust sets and plot
     R = S²_grid .< cutoff
-    p = heatmap(xs, ys, R, xlabel=L"x_1", ylabel=L"x_2", c=cgrad([:white, :lightskyblue]), cbar=false)
+    p = heatmap(xs, ys, R, xlabel = L"x_1", ylabel = L"x_2", c = cgrad([:white, :lightskyblue]), cbar = false)
     savefig(p, "output/s2_robust_$(ϵ).pdf")
 end

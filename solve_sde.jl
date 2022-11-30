@@ -10,7 +10,7 @@ Will use multithreading if available: Threads.nthreads()
 """
 function sde_realisations!(dest, vel!, σ, N, d_y, d_W, ε, y₀, t₀, T, dt)
     nrp = @SArray(zeros(d_y, d_W))
-    sde_prob = SDEProblem(vel!, σ, y₀, (t₀, T), ε, noise_rate_prototype=nrp)
+    sde_prob = SDEProblem(vel!, σ, y₀, (t₀, T), ε, noise_rate_prototype = nrp)
 
     # This function will be called on the output of each realisation when solving the
     # EnsembleProblem. Here, we take the final position of the solution and place it
@@ -19,8 +19,8 @@ function sde_realisations!(dest, vel!, σ, N, d_y, d_W, ε, y₀, t₀, T, dt)
         dest[:, i] = last(sol)
         (nothing, false)
     end
-    ens = EnsembleProblem(sde_prob, output_func=output_func)
-    solve(ens, EM(), EnsembleThreads(), trajectories=N, dt=dt, save_everystep=false)
+    ens = EnsembleProblem(sde_prob, output_func = output_func)
+    solve(ens, EM(), EnsembleThreads(), trajectories = N, dt = dt, save_everystep = false)
 
     nothing
 end
@@ -29,7 +29,7 @@ end
 
 Generate realisations of the SDE solution and the limiting solution.
 """
-function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model, space_time::SpaceTime, N::Int64, εs::AbstractVector, dts::AbstractVector; quiet=false)
+function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model, space_time, N, εs, dts; quiet = false)
     @unpack name, d, velocity, ∇u, σ = model
     @unpack x₀, t₀, T = space_time
     nε = length(εs)
@@ -43,7 +43,7 @@ function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model
     # Calculate the deterministic trajectory. This is needed to form the limiting velocity field
     !quiet && println("Solving for deterministic trajectory...")
     det_prob = ODEProblem(velocity, x₀, (t₀, T))
-    det_sol = solve(det_prob, Euler(), dt=minimum(dts))
+    det_sol = solve(det_prob, Euler(), dt = minimum(dts))
     w = last(det_sol.u)
 
     # Set up as a joint system so the same noise realisation is used.
@@ -67,19 +67,7 @@ function generate_data!(y_dest, z_dest, gauss_z_dest, gauss_y_dest, model::Model
         dt = dts[i]
 
         # Simulate from the y equation and the limiting equation simultaneously
-        sde_realisations!(
-            joint_rels,
-            joint_system,
-            σ,
-            N,
-            2 * d,
-            d,
-            ε,
-            SA[x₀; zeros(d)],
-            t₀,
-            T,
-            dt,
-        )
+        sde_realisations!(joint_rels, joint_system, σ, N, 2 * d, d, ε, SVector{2 * d}([x₀; zeros(d)]), t₀, T, dt)
 
         # Store the realisations appropriately
         y_dest[i, :, :] .= joint_rels[1:d, :]

@@ -6,14 +6,14 @@ using Parameters
 include("models.jl")
 
 """
-	star_grid(x::AbstractVector, δx::Float64)::Array
+	star_grid(x, δx)
 
 Construct a star grid around a point x, for calculating a finite difference
 approximation of a spatial derivative. The number of points in the grid is
 determined from the dimension of x; if the length of x is n, then 2n points are
 calculated.
 """
-function star_grid(x::AbstractVector, δx::Float64)::Array{Float64}
+function star_grid(x, δx)
     n = length(x)
 
     # Matrix of coordinate shifts
@@ -32,11 +32,11 @@ function star_grid(x::AbstractVector, δx::Float64)::Array{Float64}
 end
 
 """
-    ∇F(star_values, δx)
+    ∇F(star_values, n, δx)
 
 Approximate the flow map gradient with a centered finite-difference approximation, given a star grid of values.
 """
-function ∇F(star_values::AbstractArray, n::UInt8, δx::Float64)
+function ∇F(star_values, n, δx)
     return 1 / (2 * δx) * (star_values[1:2:(2*n), :] - star_values[2:2:(2*n), :])'
 end
 
@@ -70,19 +70,21 @@ end
 
 """
 	Σ_calculation(
-        model::Model,
-        x₀::AbstractVector,
-        t₀::Real,
+        model,
+        x₀,
+        t₀,
+        T,
+        dt,
     )
 
 Calculate the deviation covariance matrix Σ with an in-place specification of the velocity field.
 """
 function Σ_calculation(
-    model::Model,
-    x₀::AbstractVector,
-    t₀::Real,
-    T::Real,
-    dt::Real,
+    model,
+    x₀,
+    t₀,
+    T,
+    dt,
 )
     @unpack d, velocity, ∇u = model
 

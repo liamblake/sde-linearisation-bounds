@@ -9,22 +9,22 @@ include("covariance.jl")
 PALETTE = :spring
 
 """
-	pnorm(A::AbstractArray, dims; p::Real = 2)
+	pnorm(A; dims=1, p=2)
 
 Calculate the p-norm along the given dimension of a multidimensional array.
 """
-function pnorm(A::AbstractArray; dims=1, p::Real=2)
+function pnorm(A; dims=1, p=2)
     f = a -> norm(a, p)
     return mapslices(f, A, dims=dims)
 end
 
 """
-save_figure(p::Plots.Plot, fname::String; show_print::Bool=true)
+save_figure(p, fname; show_print=true)
 
 Helper function to save a Plots.plot object to the given file fname. If show_print is true, then
 a line is printed indicating where the figure has been saved.
 """
-function save_figure(p::Plots.Plot, fname::String; show_print::Bool=true)
+function save_figure(p, fname; show_print=true)
     path = "output/$(fname)"
     if show_print
         println("Saving figure to $(path)")
@@ -70,12 +70,12 @@ function bivariate_std_dev(μ, Σ; nσ=1, plt=plot(), colour=:black, label="", a
 end
 
 """
-	lobf(x::AbstractVector, y::AbstractVector; intercept::Bool = false)
+	lobf(x, y; intercept = false)
 
 Given some 2-dimensional data, calculate a line of best fit, with a least-squares estimate.
 An intercept is included by default.
 """
-function lobf(x::AbstractVector, y::AbstractVector; intercept::Bool=true)
+function lobf(x, y; intercept=true)
     n = length(x)
 
     if intercept
@@ -105,11 +105,11 @@ end
 Add a line of best fit to a given plot, with an optional annotation.
 """
 function add_lobf_to_plot!(
-    p::Plots.Plot,
-    x::AbstractVector,
-    y::AbstractVector;
-    intercept::Bool=true,
-    annotation::Function=nothing
+    p,
+    x,
+    y;
+    intercept=true,
+    annotation=nothing
 )
     fit, coefs = lobf(x, y; intercept=intercept)
     slope = round(coefs[2], digits=2)
