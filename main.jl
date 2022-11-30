@@ -42,10 +42,10 @@ function σ_id!(dW, _, _, _)
     nothing
 end
 model = ex_rossby(σ_id!)
-space_time = SpaceTime([0.0, 1.0], 0.0, 1.0)
+space_time = SpaceTime(SA[0.0, 1.0], 0.0, 1.0)
 
 # The number of realisations to work with (overwritten if loading data)
-N = 10000
+N = 100
 
 rs = [1, 2, 3, 4]
 εs = [0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001]
@@ -61,7 +61,7 @@ z_rels = Array{Float64}(undef, length(εs), model.d, N)
 gauss_z_rels = Array{Float64}(undef, length(εs), model.d, N)
 gauss_y_rels = Array{Float64}(undef, length(εs), model.d, N)
 
-GENERATE = false
+GENERATE = true
 generate_or_load!(GENERATE, y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, N, εs, dts, data_fname)
 # Overwrite the number of realisations with whatever is in the file
 Nn = size(y_rels)[3]
@@ -122,20 +122,20 @@ theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time
 
 ################## Stochastic sensitivity calculations ##################
 # Create a grid of initial conditions
-xs = 0:0.01:π
-ys = 0:0.01:π
+xs = 0:0.001:π
+ys = 0:0.001:π
 x₀_grid = reshape([collect(pairs) for pairs in Base.product(xs, ys)][:], length(xs), length(ys))
 
 t₀ = 0.0
-T = 1.0
+T = 2.5
 dt = 0.01
 dx = 0.001
 
 # Pick a cut-off value
-cutoff = 25.0
+cutoff = 70.0
 
 # Repeat for several T values
-for ϵ in [0.0, 0.3]
+Threads.@threads for ϵ in [0.0, 0.3]
     # T = 2.5
     model = ex_rossby(σ_id!, ϵ=ϵ)
     S² = x -> opnorm(Σ_calculation(model, x, t₀, T, dt, dx)[2])
