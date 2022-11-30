@@ -52,17 +52,18 @@ t₀. A vector of matrices, corresponding to the flow map gradient at time steps
 is placed in the preallocated dest vector.
 
 """
-function ∇F_eov!(dest::AbstractVector, ∇u::Function, d::UInt8, t₀::Real, T::Real, dt::Real)
+function ∇F_eov!(dest, ∇u, d, t₀, T, dt)
     # Inplace definition of the ODE
-    function rate!(dx::Matrix{Float64}, x::Matrix{Float64}, _, t)
-        dx[:, :] = ∇u(t) * x
-        return nothing
+    function rate(x, _, t)
+        dx = ∇u(t) * x
+        return dx
     end
 
-    u₀ = zeros(d, d)
-    u₀[diagind(u₀)] .= 1.0
+    Id = zeros(d, d)
+    Id[diagind(Id)] .= 1.0
+    u₀ = SMatrix{d,d}(Id)
 
-    prob = ODEProblem(rate!, u₀, (t₀, T))
+    prob = ODEProblem(rate, u₀, (t₀, T))
     dest[:] = solve(prob, saveat=dt).u
 
 end
@@ -78,7 +79,7 @@ function Σ_calculation(
     t₀::Real,
     T::Real,
     dt::Real,
-    dx::Real,
+    # dx::Real,
 )
     @unpack d, velocity!, ∇u = model
 
@@ -91,7 +92,7 @@ function Σ_calculation(
 
     # Calculate the flow map gradients by solving the equation of variations directly
     ∇u_F = t -> ∇u(det_sol(t), t)
-    ∇Fs = Vector{Matrix{Float64}}(undef, length(ts))
+    ∇Fs = Vector{SMatrix{d,d,Float64}}(undef, length(ts))
     ∇F_eov!(∇Fs, ∇u_F, d, t₀, T, dt)
 
     # Form the star grid around the final position

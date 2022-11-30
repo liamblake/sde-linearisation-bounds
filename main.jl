@@ -122,8 +122,8 @@ theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time
 
 ################## Stochastic sensitivity calculations ##################
 # Create a grid of initial conditions
-xs = 0:0.001:π
-ys = 0:0.001:π
+xs = 0:0.01:π
+ys = 0:0.01:π
 x₀_grid = reshape([collect(pairs) for pairs in Base.product(xs, ys)][:], length(xs), length(ys))
 
 t₀ = 0.0
