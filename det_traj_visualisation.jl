@@ -14,10 +14,10 @@ t₀ = 0.0
 T = 2.5
 
 x₀ = [0.0, 1.0]
-prob = ODEProblem(rossby.velocity!, x₀, (t₀, T))
+prob = ODEProblem(rossby.velocity, x₀, (t₀, T))
 sol1 = solve(prob)
 
-prob = remake(prob, u0=[1.1, π/2])
+prob = remake(prob, u0=[1.1, π / 2])
 sol2 = solve(prob)
 
 prob = remake(prob, u0=[0.4, 1.0])

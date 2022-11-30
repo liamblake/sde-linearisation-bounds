@@ -69,7 +69,11 @@ function ∇F_eov!(dest, ∇u, d, t₀, T, dt)
 end
 
 """
-	Σ_calculation
+	Σ_calculation(
+        model::Model,
+        x₀::AbstractVector,
+        t₀::Real,
+    )
 
 Calculate the deviation covariance matrix Σ with an in-place specification of the velocity field.
 """
@@ -79,14 +83,13 @@ function Σ_calculation(
     t₀::Real,
     T::Real,
     dt::Real,
-    # dx::Real,
 )
-    @unpack d, velocity!, ∇u = model
+    @unpack d, velocity, ∇u = model
 
     ts = t₀:dt:T
     # Generate the required flow map data
     # First, advect the initial condition forward to obtain the final position
-    prob = ODEProblem(velocity!, x₀, (t₀, T))
+    prob = ODEProblem(velocity, x₀, (t₀, T))
     det_sol = solve(prob, Euler(), dt=dt)
     w = last(det_sol)
 
@@ -99,7 +102,7 @@ function Σ_calculation(
     # star = star_grid(w, dx)
 
     # Advect these points backwards to the initial time
-    # prob = ODEProblem(velocity!, star[1, :], (T, t₀))
+    # prob = ODEProblem(velocity, star[1, :], (T, t₀))
     # ensemble = EnsembleProblem(prob, prob_func=(prob, i, _) -> remake(prob, u0=star[i, :]))
     # sol = solve(ensemble, Euler(), EnsembleThreads(), dt=dt, trajectories=2 * d)
 

@@ -146,7 +146,7 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
         # This is repeated for each value of ε, since the realisations were generated using a
         # different step size for each value. Otherwise, the mean of the realisations and the
         # determinstic solution do not match up, due to differing accuracies.
-        w, Σ = Σ_calculation(model, x₀, t₀, T, dts[i], 0.0001)
+        w, Σ = Σ_calculation(model, x₀, t₀, T, dts[i])
         # Theoretical stochastic sensitivity - the maximum eigenvalue of Σ
         S2 = opnorm(Matrix(Σ))
         # TODO: Why am I recalculating this every time?
