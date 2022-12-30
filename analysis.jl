@@ -13,9 +13,9 @@ PALETTE = :spring
 
 Calculate the p-norm along the given dimension of a multidimensional array.
 """
-function pnorm(A; dims=1, p=2)
+function pnorm(A; dims = 1, p = 2)
     f = a -> norm(a, p)
-    return mapslices(f, A, dims=dims)
+    return mapslices(f, A; dims = dims)
 end
 
 """
@@ -24,14 +24,13 @@ save_figure(p, fname; show_print=true)
 Helper function to save a Plots.plot object to the given file fname. If show_print is true, then
 a line is printed indicating where the figure has been saved.
 """
-function save_figure(p, fname; show_print=true)
+function save_figure(p, fname; show_print = true)
     path = "output/$(fname)"
     if show_print
         println("Saving figure to $(path)")
     end
     savefig(p, path)
 end
-
 
 """
 	bivariate_gaussian_std_dev(μ, Σ; nσ = 1, plt = plot(), ...)
@@ -40,7 +39,7 @@ Plot the n standard-deviation regions of a bivariate Gaussian distribution
 with mean μ and covariance matrix Σ. The number of regions plotted is specified
 by nσ.
 """
-function bivariate_std_dev(μ, Σ; nσ=1, plt=plot(), colour=:black, label="", args...)
+function bivariate_std_dev(μ, Σ; nσ = 1, plt = plot(), colour = :black, label = "", args...)
     # Calculate the first two principal axes of the covariance matrix
     # These correspond to the major and minor axes of the ellipse
     evals, evecs = eigen(Σ)
@@ -59,14 +58,13 @@ function bivariate_std_dev(μ, Σ; nσ=1, plt=plot(), colour=:black, label="", a
         x = t -> n * (a * cos(t) * cos(θ) - b * sin(t) * sin(θ)) + μ[1]
         y = t -> n * (a * cos(t) * sin(θ) + b * sin(t) * cos(θ)) + μ[2]
 
-        plot!(x, y, 0, 2π, linecolor=colour, label=(n == 1) ? label : ""; args...)
+        plot!(x, y, 0, 2π; linecolor = colour, label = (n == 1) ? label : "", args...)
     end
 
     # Also plot the mean
-    scatter!([μ[1]], [μ[2]], markersize=3, markercolor=colour, label="")
+    scatter!([μ[1]], [μ[2]]; markersize = 3, markercolor = colour, label = "")
 
     return plt
-
 end
 
 """
@@ -75,7 +73,7 @@ end
 Given some 2-dimensional data, calculate a line of best fit, with a least-squares estimate.
 An intercept is included by default.
 """
-function lobf(x, y; intercept=true)
+function lobf(x, y; intercept = true)
     n = length(x)
 
     if intercept
@@ -91,8 +89,6 @@ function lobf(x, y; intercept=true)
     return X * coefs, coefs
 end
 
-
-
 """
 	add_lobf_to_plot!(
 		p::Plots.Plot,
@@ -104,16 +100,10 @@ end
 
 Add a line of best fit to a given plot, with an optional annotation.
 """
-function add_lobf_to_plot!(
-    p,
-    x,
-    y;
-    intercept=true,
-    annotation=nothing
-)
-    fit, coefs = lobf(x, y; intercept=intercept)
-    slope = round(coefs[2], digits=2)
-    plot!(p, x, fit, linecolor=:red, linestyle=:dash)
+function add_lobf_to_plot!(p, x, y; intercept = true, annotation = nothing)
+    fit, coefs = lobf(x, y; intercept = intercept)
+    slope = round(coefs[2]; digits = 2)
+    plot!(p, x, fit; linecolor = :red, linestyle = :dash)
 
     # Add an annotation with the given label
     if annotation !== nothing
@@ -121,10 +111,22 @@ function add_lobf_to_plot!(
     end
 end
 
-function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, εs, dts, rs; legend_idx=1)
+function theorem_validation(
+    y_rels,
+    z_rels,
+    gauss_z_rels,
+    gauss_y_rels,
+    model,
+    space_time,
+    εs,
+    dts,
+    rs;
+    ode_solver = Euler(),
+    legend_idx = 1,
+    plot_attrs = Dict(),
+)
     @unpack x₀, t₀, T = space_time
     name = "$(model.name)_$(x₀)_[$(t₀),$(T)]"
-
 
     nε = length(εs)
     nr = length(rs)
@@ -132,42 +134,37 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
     # Preallocate storage of results
     y_abs_diff = Array{Float64}(undef, (nr, nε))
     z_abs_diff = Array{Float64}(undef, (nr, nε))
-    z_mean_diff = Vector{Float64}(undef, nε)
-    y_mean_diff = Vector{Float64}(undef, nε)
+    z_means = Array{Float64}(undef, nε, 2)
+    y_means = Array{Float64}(undef, nε, 2)
     sample_S2s = Vector{Float64}(undef, nε)
 
     # Only plot histograms if working in 2D
     plot_histograms = (model.d == 2)
-
-    S2 = 0.0
+    S2 = 1.0
 
     for (i, ε) in enumerate(εs)
         # Calculate the deviation covariance from the integral expression
-        # This is repeated for each value of ε, since the realisations were generated using a
-        # different step size for each value. Otherwise, the mean of the realisations and the
-        # determinstic solution do not match up, due to differing accuracies.
-        w, Σ = Σ_calculation(model, x₀, t₀, T, dts[i])
+        w, Σ = Σ_calculation(model, x₀, t₀, T - dts[i], dts[i], 0.001, ode_solver)
         # Theoretical stochastic sensitivity - the maximum eigenvalue of Σ
         S2 = opnorm(Matrix(Σ))
-        # TODO: Why am I recalculating this every time?
 
         # Diagnostics - mean should be zero
-        y_mean_diff[i] = mean(pnorm(y_rels[i, :, :] .- w, dims=1))
-        z_mean_diff[i] = mean(pnorm(z_rels[i, :, :], dims=1))
+        y_means[i, :] = mean(y_rels[i, :, :] .- w; dims = 2)
+        z_means[i, :] = mean(z_rels[i, :, :]; dims = 2)
 
         # Calculate the normed distance between each pair of realisations
         # The overall mean provides an estimate of 𝔼[|y_ε - w - ε * z|ʳ]
-        y_diffs = pnorm(y_rels[i, :, :] .- gauss_y_rels[i, :, :], dims=1)
+        y_diffs = pnorm(y_rels[i, :, :] .- gauss_y_rels[i, :, :]; dims = 1)
 
         # Calculate the normed distance between the scaled deviation and the solution,
         # in order to estimate 𝔼[|z_ε - z|ʳ]
-        z_diffs = pnorm(z_rels[i, :, :] .- gauss_z_rels[i, :, :], dims=1)
+        z_diffs = pnorm(z_rels[i, :, :] .- gauss_z_rels[i, :, :]; dims = 1)
 
         # Calculate the sample covariance matrices
-        s_mean_y = mean(y_rels[i, :, :], dims=2)
-        S_y = cov(y_rels[i, :, :], dims=2)
-        s_mean_z = mean(z_rels[i, :, :], dims=2)
-        S_z = cov(z_rels[i, :, :], dims=2)
+        s_mean_y = mean(y_rels[i, :, :]; dims = 2)
+        S_y = cov(y_rels[i, :, :]; dims = 2)
+        s_mean_z = mean(z_rels[i, :, :]; dims = 2)
+        S_z = cov(z_rels[i, :, :]; dims = 2)
         # Calculate empirical stochastic sensitivity
         sample_S2s[i] = opnorm(S_z)
 
@@ -181,185 +178,248 @@ function theorem_validation(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, s
             # Plot a histogram of the realisations
             p = histogram2d(
                 y_rels[i, 1, :],
-                y_rels[i, 2, :],
-                bins=100,
-                xlabel=L"y_1",
-                ylabel=L"y_2",
-                legend=(i == legend_idx),
-                cbar=true,
-                c=cgrad(PALETTE, rev=true),
-                label="", grid=false
+                y_rels[i, 2, :];
+                bins = 100,
+                xlabel = L"y_1",
+                ylabel = L"y_2",
+                legend = (i == legend_idx),
+                cbar = true,
+                c = cgrad(PALETTE; rev = true),
+                label = "",
+                grid = false,
+                plot_attrs...,
             )
             p = bivariate_std_dev(
                 w,
-                ε^2 * Σ,
-                nσ=3,
-                plt=p,
-                colour=:black,
-                linestyle=:solid,
-                label="Theory",
+                ε^2 * Σ;
+                nσ = 3,
+                plt = p,
+                colour = :black,
+                linestyle = :solid,
+                label = "Theory",
             )
             p = bivariate_std_dev(
                 s_mean_y,
-                S_y,
-                nσ=3,
-                plt=p,
-                colour=:red,
-                linestyle=:dash,
-                label="Empirical",
+                S_y;
+                nσ = 3,
+                plt = p,
+                colour = :red,
+                linestyle = :dash,
+                label = "Empirical",
             )
-            save_figure(p, "$(name)/y_histogram_$(ε).pdf", show_print=false)
+            save_figure(p, "$(name)/y_histogram_$(ε).pdf"; show_print = false)
 
             # The scaled deviations z_ε
             p = histogram2d(
                 z_rels[i, 1, :],
-                z_rels[i, 2, :],
-                bins=100,
-                xlabel=L"z_1",
-                ylabel=L"z_2",
-                legend=(i == legend_idx),
-                cbar=true,
-                c=cgrad(PALETTE, rev=true),
-                label="",
-                grid=false
+                z_rels[i, 2, :];
+                bins = 100,
+                xlabel = L"z_1",
+                ylabel = L"z_2",
+                legend = (i == legend_idx),
+                cbar = true,
+                c = cgrad(PALETTE; rev = true),
+                label = "",
+                grid = false,
+                plot_attrs...,
             )
             p = bivariate_std_dev(
                 [0, 0],
-                Σ,
-                nσ=3,
-                plt=p,
-                colour=:black,
-                linestyle=:solid,
-                label="Theory",
+                Σ;
+                nσ = 3,
+                plt = p,
+                colour = :black,
+                linestyle = :solid,
+                label = "Theory",
             )
             p = bivariate_std_dev(
                 s_mean_z,
-                S_z,
-                nσ=3,
-                plt=p,
-                colour=:red,
-                linestyle=:dash,
-                label="Empirical",
+                S_z;
+                nσ = 3,
+                plt = p,
+                colour = :red,
+                linestyle = :dash,
+                label = "Empirical",
             )
-            save_figure(p, "$(name)/z_histogram_$(ε).pdf", show_print=false)
-
+            save_figure(p, "$(name)/z_histogram_$(ε).pdf"; show_print = false)
         end
-
     end
 
     for (j, r) in enumerate(rs)
         vals = log10.(@view y_abs_diff[j, :])
         p = scatter(
             log10.(εs),
-            vals,
-            xlabel=L"\log{\,\varepsilon}",
-            ylabel=L"\log{\,\Gamma_y^{(%$r)}(\varepsilon)}",
-            legend=false, grid=false
+            vals;
+            xlabel = L"\log{\,\varepsilon}",
+            ylabel = L"\log{\,\Gamma_y^{(%$r)}(\varepsilon)}",
+            legend = false,
+            grid = false,
+            plot_attrs...,
         )
         save_figure(p, "$(name)/y_diff_$(r).pdf")
 
         add_lobf_to_plot!(
             p,
             log10.(εs),
-            vals,
-            annotation=slope ->
-                L"\Gamma_y^{(%$r)}(\varepsilon) \sim \varepsilon^{%$slope}",
+            vals;
+            annotation = slope -> L"\Gamma_y^{(%$r)}(\varepsilon) \sim \varepsilon^{%$slope}",
         )
         save_figure(p, "$(name)/y_diff_$(r)_lobf.pdf")
 
         vals = log10.(@view z_abs_diff[j, :])
         p = scatter(
             log10.(εs),
-            vals,
-            xlabel=L"\log{\,\varepsilon}",
-            ylabel=L"\log{\,\Gamma_z^{(%$r)}(\varepsilon)}",
-            legend=false, grid=false
+            vals;
+            xlabel = L"\log{\,\varepsilon}",
+            ylabel = L"\log{\,\Gamma_z^{(%$r)}(\varepsilon)}",
+            legend = false,
+            grid = false,
+            plot_attrs...,
         )
         save_figure(p, "$(name)/z_diff_$(r).pdf")
 
         add_lobf_to_plot!(
             p,
             log10.(εs),
-            vals,
-            annotation=slope ->
-                L"\Gamma_z^{(%$r)}(\varepsilon) \sim \varepsilon^{%$slope}",
+            vals;
+            annotation = slope -> L"\Gamma_z^{(%$r)}(\varepsilon) \sim \varepsilon^{%$slope}",
         )
         save_figure(p, "$(name)/z_diff_$(r)_lobf.pdf")
-
     end
 
     # Plot the difference in stochastic sensitivity
     abs_S2_diff = abs.(sample_S2s .- S2)
     p = scatter(
         log10.(εs),
-        abs_S2_diff,
-        legend=false,
-        xlabel=L"\log{\,\varepsilon}",
-        ylabel=L"\Gamma_{S^2}(\varepsilon)", grid=false
+        abs_S2_diff;
+        legend = false,
+        xlabel = L"\log{\,\varepsilon}",
+        ylabel = L"\Gamma_{S^2}(\varepsilon)",
+        grid = false,
+        plot_attrs...,
     )
     save_figure(p, "$(name)/s2_diff.pdf")
 
     p = scatter(
         log10.(εs),
-        log10.(abs_S2_diff),
-        legend=false,
-        xlabel=L"\log{\,\varepsilon}",
-        ylabel=L"\log{\,\Gamma_{S^2}(\varepsilon)}",
-        grid=false
+        log10.(abs_S2_diff);
+        legend = false,
+        xlabel = L"\log{\,\varepsilon}",
+        ylabel = L"\log{\,\Gamma_{S^2}(\varepsilon)}",
+        grid = false,
+        plot_attrs...,
     )
     save_figure(p, "$(name)/s2_diff_log.pdf")
 
     add_lobf_to_plot!(
         p,
         log10.(εs),
-        log10.(abs_S2_diff),
-        annotation=slope -> L"\Gamma_{S^2}(\varepsilon) \sim \varepsilon^{%$slope}",
+        log10.(abs_S2_diff);
+        annotation = slope -> L"\Gamma_{S^2}(\varepsilon) \sim \varepsilon^{%$slope}",
     )
     save_figure(p, "$(name)/s2_diff_log_lobf.pdf")
 
     # Plot the difference between the realisations of the y SDE and w. Should be going to zero
     # as epsilon gets smaller.
-    p = scatter(log10.(εs), log10.(y_mean_diff), xlabel=L"\log{\,\varepsilon}", ylabel=L"\log{\,\Gamma_{E}(\varepsilon)}", legend=false, grid=false)
+    p = scatter(
+        log10.(εs),
+        log10.(abs.(y_means[:, 1]));
+        xlabel = L"\log{\,\varepsilon}",
+        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        legend = false,
+        grid = false,
+        plot_attrs...,
+    )
     add_lobf_to_plot!(
         p,
         log10.(εs),
-        log10.(y_mean_diff),
-        annotation=slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}"
+        log10.(abs.(y_means[:, 1]));
+        annotation = slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}",
     )
-    save_figure(p, "$(name)/y_mean.pdf")
+    save_figure(p, "$(name)/y_1_mean.pdf")
 
-    p = scatter(log10.(εs), log10.(z_mean_diff), xlabel=L"\log{\,\varepsilon}", ylabel=L"\log{\,\Gamma_{E}(\varepsilon)}", legend=false, grid=false)
+    p = scatter(
+        log10.(εs),
+        log10.(abs.(y_means[:, 2]));
+        xlabel = L"\log{\,\varepsilon}",
+        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        legend = false,
+        grid = false,
+        plot_attrs...,
+    )
     add_lobf_to_plot!(
         p,
         log10.(εs),
-        log10.(z_mean_diff),
-        annotation=slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}"
+        log10.(abs.(y_means[:, 2]));
+        annotation = slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}",
     )
-    save_figure(p, "$(name)/z_mean.pdf")
+    save_figure(p, "$(name)/y_2_mean.pdf")
+
+    p = scatter(
+        log10.(εs),
+        log10.(pnorm(y_means; dims = 2));
+        xlabel = L"\log{\,\varepsilon}",
+        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        legend = false,
+        grid = false,
+        plot_attrs...,
+    )
+    add_lobf_to_plot!(
+        p,
+        log10.(εs),
+        log10.(pnorm(y_means; dims = 2));
+        annotation = slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}",
+    )
+    save_figure(p, "$(name)/y_norm_mean.pdf")
+
+    p = scatter(
+        log10.(εs),
+        log10.(abs.(z_means[:, 1]));
+        xlabel = L"\log{\,\varepsilon}",
+        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        legend = false,
+        grid = false,
+        plot_attrs...,
+    )
+    add_lobf_to_plot!(
+        p,
+        log10.(εs),
+        log10.(abs.(z_means[:, 1]));
+        annotation = slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}",
+    )
+    save_figure(p, "$(name)/z_1_mean.pdf")
+
+    p = scatter(
+        log10.(εs),
+        log10.(abs.(z_means[:, 2]));
+        xlabel = L"\log{\,\varepsilon}",
+        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        legend = false,
+        grid = false,
+        plot_attrs...,
+    )
+    add_lobf_to_plot!(
+        p,
+        log10.(εs),
+        log10.(abs.(z_means[:, 2]));
+        annotation = slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}",
+    )
+    save_figure(p, "$(name)/z_2_mean.pdf")
+
+    p = scatter(
+        log10.(εs),
+        log10.(pnorm(z_means; dims = 2));
+        xlabel = L"\log{\,\varepsilon}",
+        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        legend = false,
+        grid = false,
+        plot_attrs...,
+    )
+    add_lobf_to_plot!(
+        p,
+        log10.(εs),
+        log10.(pnorm(z_means; dims = 2));
+        annotation = slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}",
+    )
+    save_figure(p, "$(name)/z_norm_mean.pdf")
 end
-
-
-# function many_points_plot(many_y_rels, model, space_times, ε, dt, xlim, ylim)
-#     npoints = length(space_times)
-#     @assert size(many_y_rels)[1] == npoints
-
-#     # Calculate Σ for each point
-#     p = plot()
-#     for (i, st) in enumerate(space_times)
-#         w, Σ = Σ_calculation(model, st.x₀, st.t₀, st.T, dt, 0.001)
-#         histogram2d!(p, many_y_rels[i, 1, :], many_y_rels[i, 2, :], bins=100, c=cgrad(PALETTE, rev=true), legend=false, grid=false)
-
-#         p = bivariate_std_dev(
-#             w,
-#             ε^2 * Σ,
-#             nσ=2,
-#             plt=p,
-#             colour=:black,
-#             linestyle=:solid,
-#         )
-#     end
-#     xlims!(p, xlim)
-#     ylims!(p, ylim)
-
-#     save_figure(p, "$(model.name)_$(x₀)_many.pdf")
-# end

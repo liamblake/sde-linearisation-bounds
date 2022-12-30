@@ -32,7 +32,8 @@ suite["Σ_calculation"] = @benchmarkable Σ_calculation(model, x₀, t₀, T, 0.
 # Solving of SDE
 N = 10
 dest = Array{Float64}(undef, (2, N))
-suite["sde_realisations"] = @benchmarkable sde_realisations!(dest, model.velocity, σ, N, 2, 2, 1.0, x₀, t₀, T, 0.01)
+suite["sde_realisations"] =
+    @benchmarkable sde_realisations!(dest, model.velocity, σ, N, 2, 2, 1.0, x₀, t₀, T, 0.01)
 
 
 # Upon running/including this file, tune and run the benchmark suite

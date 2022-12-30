@@ -25,8 +25,8 @@ function star_grid(x, δx)
     # |0  ⋯     0  ⋯ 1|
     # ⌊0  ⋯     0  ⋯ 0⌋
     A = zeros(2 * n, n)
-    A[1:(2*n+2):(2*n^2)] .= 1
-    A[2:(2*n+2):(2*n^2)] .= -1
+    A[1:(2 * n + 2):(2 * n^2)] .= 1
+    A[2:(2 * n + 2):(2 * n^2)] .= -1
 
     return repeat(x', 2 * n) + δx * A
 end
@@ -37,7 +37,7 @@ end
 Approximate the flow map gradient with a centered finite-difference approximation, given a star grid of values.
 """
 function ∇F(star_values, n, δx)
-    return 1 / (2 * δx) * (star_values[1:2:(2*n), :] - star_values[2:2:(2*n), :])'
+    return 1 / (2 * δx) * (star_values[1:2:(2 * n), :] - star_values[2:2:(2 * n), :])'
 end
 
 """
@@ -64,8 +64,7 @@ function ∇F_eov!(dest, ∇u, d, t₀, T, dt)
     u₀ = SMatrix{d,d}(Id)
 
     prob = ODEProblem(rate, u₀, (t₀, T))
-    dest[:] = solve(prob, saveat = dt).u
-
+    dest[:] = solve(prob; saveat = dt).u
 end
 
 """
@@ -73,36 +72,36 @@ end
 
 Calculate the deviation covariance matrix Σ with an in-place specification of the velocity field.
 """
-function Σ_calculation(model, x₀, t₀, T, dt)
+function Σ_calculation(model, x₀, t₀, T, dt, dx, ode_solver)
     @unpack d, velocity, ∇u = model
 
     ts = t₀:dt:T
     # Generate the required flow map data
     # First, advect the initial condition forward to obtain the final position
     prob = ODEProblem(velocity, x₀, (t₀, T))
-    det_sol = solve(prob, Euler(), dt = dt)
+    det_sol = solve(prob, ode_solver; dt = dt)
     w = last(det_sol)
 
     # Calculate the flow map gradients by solving the equation of variations directly
-    ∇u_F = t -> ∇u(det_sol(t), t)
-    ∇Fs = Vector{SMatrix{d,d,Float64}}(undef, length(ts))
-    ∇F_eov!(∇Fs, ∇u_F, d, t₀, T, dt)
+    # ∇u_F = t -> ∇u(det_sol(t), t)
+    # ∇Fs = Vector{SMatrix{d,d,Float64}}(undef, length(ts))
+    # ∇F_eov!(∇Fs, ∇u_F, d, t₀, T, dt)
 
-    # Form the star grid around the final position
-    # star = star_grid(w, dx)
+    # Form the star grid around the initial position
+    star = star_grid(x₀, dx)
 
-    # Advect these points backwards to the initial time
-    # prob = ODEProblem(velocity, star[1, :], (T, t₀))
-    # ensemble = EnsembleProblem(prob, prob_func=(prob, i, _) -> remake(prob, u0=star[i, :]))
-    # sol = solve(ensemble, Euler(), EnsembleThreads(), dt=dt, trajectories=2 * d)
+    # Advect these points forwards to the initial time
+    prob = ODEProblem(velocity, star[1, :], (t₀, T))
+    ensemble = EnsembleProblem(prob; prob_func = (prob, i, _) -> remake(prob; u0 = star[i, :]))
+    sol = solve(ensemble, ode_solver, EnsembleThreads(); dt = dt, trajectories = 2 * d)
 
     # Permute the dimensions of the ensemble solution so star_values is indexed
     # as (timestep, gridpoint, coordinate).
-    # star_values = Array{Float64}(undef, length(sol[1]), 2 * d, d)
-    # permutedims!(star_values, Array(sol), [2, 3, 1])
+    star_values = Array{Float64}(undef, length(sol[1]), 2 * d, d)
+    permutedims!(star_values, Array(sol), [2, 3, 1])
 
     # Approximate the flow map gradient at each time step
-    # ∇Fs = ∇F.(eachslice(star_values, dims=1), d, dx)
+    ∇Fs = ∇F.(eachslice(star_values; dims = 1), d, dx)
 
     # TODO: Work with non-identity σ
     Ks = [last(∇Fs)] .* inv.(∇Fs)

@@ -55,7 +55,10 @@ The parameters are
 """
 function ex_rossby(σ::Function; A = 1.0, c = 0.5, K = 4.0, l₁ = 2.0, c₁ = π, k₁ = 1.0, ϵ = 0.3)
     function rossby(x, _, t)
-        SA[c-A*sin(K * x[1])*cos(x[2])+ϵ*l₁*sin(k₁ * (x[1] - c₁ * t))*cos(l₁ * x[2]), A*K*cos(K * x[1])*sin(x[2])+ϵ*k₁*cos(k₁ * (x[1] - c₁ * t))*sin(l₁ * x[2])]
+        SA[
+            c-A*sin(K * x[1])*cos(x[2])+ϵ*l₁*sin(k₁ * (x[1] - c₁ * t))*cos(l₁ * x[2]),
+            A*K*cos(K * x[1])*sin(x[2])+ϵ*k₁*cos(k₁ * (x[1] - c₁ * t))*sin(l₁ * x[2]),
+        ]
     end
 
     # The velocity gradient matrix is known exactly
