@@ -22,3 +22,6 @@ data/
 
 # Generated figures
 output/
+
+# Mainly serves as a scratchpad for choosing appropriate initial conditions
+det_traj_visualisation.jl
