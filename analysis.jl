@@ -1,4 +1,5 @@
 using LinearAlgebra
+using Printf
 
 using Plots
 using Statistics
@@ -152,10 +153,6 @@ function theorem_validation(
         y_means[i, :] = mean(y_rels[i, :, :] .- w; dims = 2)
         z_means[i, :] = mean(z_rels[i, :, :]; dims = 2)
 
-        # Calculate the normed distance between each pair of realisations
-        # The overall mean provides an estimate of 𝔼[|y_ε - w - ε * z|ʳ]
-        y_diffs = pnorm(y_rels[i, :, :] .- gauss_y_rels[i, :, :]; dims = 1)
-
         # Calculate the normed distance between the scaled deviation and the solution,
         # in order to estimate 𝔼[|z_ε - z|ʳ]
         z_diffs = pnorm(z_rels[i, :, :] .- gauss_z_rels[i, :, :]; dims = 1)
@@ -168,9 +165,8 @@ function theorem_validation(
         # Calculate empirical stochastic sensitivity
         sample_S2s[i] = opnorm(S_z)
 
-        println("ε = $(ε): $(s_mean_z)")
+        # println("ε = $(ε): $(s_mean_z)")
         for (j, r) in enumerate(rs)
-            y_abs_diff[j, i] = mean(y_diffs .^ r)
             z_abs_diff[j, i] = mean(z_diffs .^ r)
         end
 
@@ -207,7 +203,7 @@ function theorem_validation(
                 linestyle = :dash,
                 label = "Empirical",
             )
-            save_figure(p, "$(name)/y_histogram_$(ε).pdf"; show_print = false)
+            save_figure(p, "$(name)/y_histogram_$(@sprintf("%.3f", ε)).pdf")
 
             # The scaled deviations z_ε
             p = histogram2d(
@@ -241,37 +237,17 @@ function theorem_validation(
                 linestyle = :dash,
                 label = "Empirical",
             )
-            save_figure(p, "$(name)/z_histogram_$(ε).pdf"; show_print = false)
+            save_figure(p, "$(name)/z_histogram_$(@sprintf("%.3f", ε)).pdf")
         end
     end
 
     for (j, r) in enumerate(rs)
-        vals = log10.(@view y_abs_diff[j, :])
-        p = scatter(
-            log10.(εs),
-            vals;
-            xlabel = L"\log{\,\varepsilon}",
-            ylabel = L"\log{\,\Gamma_y^{(%$r)}(\varepsilon)}",
-            legend = false,
-            grid = false,
-            plot_attrs...,
-        )
-        save_figure(p, "$(name)/y_diff_$(r).pdf")
-
-        add_lobf_to_plot!(
-            p,
-            log10.(εs),
-            vals;
-            annotation = slope -> L"\Gamma_y^{(%$r)}(\varepsilon) \sim \varepsilon^{%$slope}",
-        )
-        save_figure(p, "$(name)/y_diff_$(r)_lobf.pdf")
-
         vals = log10.(@view z_abs_diff[j, :])
         p = scatter(
             log10.(εs),
             vals;
-            xlabel = L"\log{\,\varepsilon}",
-            ylabel = L"\log{\,\Gamma_z^{(%$r)}(\varepsilon)}",
+            xlabel = L"\log_{10}{\,\varepsilon}",
+            ylabel = L"\log_{10}{\,\Gamma_z^{(%$r)}(\varepsilon)}",
             legend = false,
             grid = false,
             plot_attrs...,
@@ -293,7 +269,7 @@ function theorem_validation(
         log10.(εs),
         abs_S2_diff;
         legend = false,
-        xlabel = L"\log{\,\varepsilon}",
+        xlabel = L"\log_{10}{\,\varepsilon}",
         ylabel = L"\Gamma_{S^2}(\varepsilon)",
         grid = false,
         plot_attrs...,
@@ -304,8 +280,8 @@ function theorem_validation(
         log10.(εs),
         log10.(abs_S2_diff);
         legend = false,
-        xlabel = L"\log{\,\varepsilon}",
-        ylabel = L"\log{\,\Gamma_{S^2}(\varepsilon)}",
+        xlabel = L"\log_{10}{\,\varepsilon}",
+        ylabel = L"\log_{10}{\,\Gamma_{S^2}(\varepsilon)}",
         grid = false,
         plot_attrs...,
     )
@@ -324,8 +300,8 @@ function theorem_validation(
     p = scatter(
         log10.(εs),
         log10.(abs.(y_means[:, 1]));
-        xlabel = L"\log{\,\varepsilon}",
-        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        xlabel = L"\log_{10}{\,\varepsilon}",
+        ylabel = L"\log_{10}{\,\Gamma_{E}(\varepsilon)}",
         legend = false,
         grid = false,
         plot_attrs...,
@@ -341,8 +317,8 @@ function theorem_validation(
     p = scatter(
         log10.(εs),
         log10.(abs.(y_means[:, 2]));
-        xlabel = L"\log{\,\varepsilon}",
-        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        xlabel = L"\log_{10}{\,\varepsilon}",
+        ylabel = L"\log_{10}{\,\Gamma_{E}(\varepsilon)}",
         legend = false,
         grid = false,
         plot_attrs...,
@@ -358,8 +334,8 @@ function theorem_validation(
     p = scatter(
         log10.(εs),
         log10.(pnorm(y_means; dims = 2));
-        xlabel = L"\log{\,\varepsilon}",
-        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        xlabel = L"\log_{10}{\,\varepsilon}",
+        ylabel = L"\log_{10}{\,\Gamma_{E}(\varepsilon)}",
         legend = false,
         grid = false,
         plot_attrs...,
@@ -375,8 +351,8 @@ function theorem_validation(
     p = scatter(
         log10.(εs),
         log10.(abs.(z_means[:, 1]));
-        xlabel = L"\log{\,\varepsilon}",
-        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        xlabel = L"\log_{10}{\,\varepsilon}",
+        ylabel = L"\log_{10}{\,\Gamma_{E}(\varepsilon)}",
         legend = false,
         grid = false,
         plot_attrs...,
@@ -392,8 +368,8 @@ function theorem_validation(
     p = scatter(
         log10.(εs),
         log10.(abs.(z_means[:, 2]));
-        xlabel = L"\log{\,\varepsilon}",
-        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        xlabel = L"\log_{10}{\,\varepsilon}",
+        ylabel = L"\log_{10}{\,\Gamma_{E}(\varepsilon)}",
         legend = false,
         grid = false,
         plot_attrs...,
@@ -409,8 +385,8 @@ function theorem_validation(
     p = scatter(
         log10.(εs),
         log10.(pnorm(z_means; dims = 2));
-        xlabel = L"\log{\,\varepsilon}",
-        ylabel = L"\log{\,\Gamma_{E}(\varepsilon)}",
+        xlabel = L"\log_{10}{\,\varepsilon}",
+        ylabel = L"\log_{10}{\,\Gamma_{E}(\varepsilon)}",
         legend = false,
         grid = false,
         plot_attrs...,

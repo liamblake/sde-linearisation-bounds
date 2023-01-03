@@ -21,7 +21,14 @@ Plots.scalefontsizes(15.0 / 11.0)
 fig_height = 600
 fig_width = fig_height / 1.4
 # Include any other plot attributes here
-plot_attrs = Dict(:size => (fig_height, fig_width))
+plot_attrs = Dict(
+    :size => (fig_height, fig_width),
+    :markercolor => :black,
+    :left_margin => 2Plots.mm,
+    :top_margin => 2Plots.mm,
+    :bottom_margin => 2Plots.mm,
+    :top_margin => 2Plots.mm,
+)
 
 # Specify the ODE and SDE solvers, as provided by DifferentialEquations.jl
 # ODE solvers: https://docs.sciml.ai/DiffEqDocs/stable/solvers/ode_solve/
@@ -30,6 +37,9 @@ plot_attrs = Dict(:size => (fig_height, fig_width))
 # materials for details.
 ode_solver = Euler()
 sde_solver = EM()
+
+# If true, generate new data (takes some time). If false, attempt to load previously saved data.
+GENERATE_DATA = false
 
 ################## Theorem validation ##################
 ## ROSSBY MODEL WITH σ = Iₙ
@@ -46,9 +56,8 @@ N = 10000
 rs = [1, 2, 3, 4]
 # The values of ε to generate realisations for, and the corresponding step sizes to use in the
 # SDE solver.
-εs = [0.1, 0.05, 0.01, 0.005, 0.001, 0.0005, 0.0001]
-dts = εs
-# dts = [ε^2 for ε in εs]
+εs = [10^i for i in range(-0.25; stop = -3.0, step = -0.25)]
+dts = [ε^2 for ε in εs]
 
 # Naming convention for data and figure outputs.
 name = "$(model.name)_$(space_time.x₀)_[$(space_time.t₀),$(space_time.T)]_I"
@@ -60,9 +69,7 @@ z_rels = Array{Float64}(undef, length(εs), model.d, N)
 gauss_z_rels = Array{Float64}(undef, length(εs), model.d, N)
 gauss_y_rels = Array{Float64}(undef, length(εs), model.d, N)
 
-# If true, generate new data (takes some time). If false, attempt to load previously saved data.
-GENERATE = false
-if GENERATE
+if GENERATE_DATA
     # Solve the SDE to generate new data
     generate_data!(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, N, εs, dts)
     save(data_fname, "y", y_rels, "z", z_rels, "gauss_z", gauss_z_rels, "gauss_y", gauss_y_rels)
@@ -86,14 +93,6 @@ else
         N = Nn
     end
 end
-
-# det_prob = ODEProblem(model.velocity, space_time.x₀, (space_time.t₀, space_time.T))
-# det_sol = solve(det_prob, Euler(); dt = minimum(dts))
-# w = last(det_sol.u)
-
-# for (i, ε) in enumerate(εs)
-#     z_rels[i, :, :] = sign.(y_rels[i, :, :] .- w) .* exp.(log.(abs.(y_rels[i, :, :] .- w)) .- log(ε))
-# end
 
 # Perform the analysis, generating and saving all appropriate plots
 println("Calculating and generating plots...")
