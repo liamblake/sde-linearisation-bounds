@@ -79,7 +79,7 @@ function Σ_calculation(model, x₀, t₀, T, dt, dx, ode_solver)
     # Generate the required flow map data
     # First, advect the initial condition forward to obtain the final position
     prob = ODEProblem(velocity, x₀, (t₀, T))
-    det_sol = solve(prob, ode_solver; dt = dt)
+    det_sol = solve(prob, ode_solver; dt = dt, dtmax = dt, saveat = dt)
     w = last(det_sol)
 
     # Calculate the flow map gradients by solving the equation of variations directly
@@ -93,7 +93,15 @@ function Σ_calculation(model, x₀, t₀, T, dt, dx, ode_solver)
     # Advect these points forwards to the initial time
     prob = ODEProblem(velocity, star[1, :], (t₀, T))
     ensemble = EnsembleProblem(prob; prob_func = (prob, i, _) -> remake(prob; u0 = star[i, :]))
-    sol = solve(ensemble, ode_solver, EnsembleThreads(); dt = dt, trajectories = 2 * d)
+    sol = solve(
+        ensemble,
+        ode_solver,
+        EnsembleThreads();
+        dt = dt,
+        dtmax = dt,
+        saveat = dt,
+        trajectories = 2 * d,
+    )
 
     # Permute the dimensions of the ensemble solution so star_values is indexed
     # as (timestep, gridpoint, coordinate).
