@@ -24,10 +24,13 @@ fig_width = fig_height / 1.4
 plot_attrs = Dict(
     :size => (fig_height, fig_width),
     :markercolor => :black,
+    # Margin padding when exporting figures
     :left_margin => 2Plots.mm,
     :top_margin => 2Plots.mm,
     :bottom_margin => 2Plots.mm,
     :top_margin => 2Plots.mm,
+    # Colorbar options
+    :colorbar => :top,
 )
 
 # Specify the ODE and SDE solvers, as provided by DifferentialEquations.jl
@@ -35,11 +38,11 @@ plot_attrs = Dict(
 # SDE solvers: https://docs.sciml.ai/DiffEqDocs/stable/solvers/sde_solve/
 # Note that the order of each solver must be compatible with the step sizes. See the supplementary
 # materials for details.
-ode_solver = Euler()
-sde_solver = EM()
+ode_solver = RK4()
+sde_solver = SRA3()
 
 # If true, generate new data (takes some time). If false, attempt to load previously saved data.
-GENERATE_DATA = false
+GENERATE_DATA = true
 
 ################## Theorem validation ##################
 ## ROSSBY MODEL WITH σ = Iₙ
@@ -51,13 +54,41 @@ model = ex_rossby(σ_id)
 space_time = SpaceTime(SA[0.0, 1.0], 0.0, 1.0)
 
 # The number of realisations to work with (overwritten if loading data)
-N = 10000
+N = 1000
 
 rs = [1, 2, 3, 4]
-# The values of ε to generate realisations for, and the corresponding step sizes to use in the
-# SDE solver.
-εs = [10^i for i in range(-0.25; stop = -3.0, step = -0.25)]
-dts = [ε^2 for ε in εs]
+# The values of ε to consider
+εs = [10^i for i in range(-1; stop = -4.0, step = -0.25)]
+# Corresponding step sizes. Chosen automatically using the strong order of the SDE solver, but can
+# be set manually if desired.
+println("Order of SDE solver: $(StochasticDiffEq.alg_order(sde_solver))")
+println("Order of ODE solver: $(OrdinaryDiffEq.alg_order(ode_solver))")
+γ = min(StochasticDiffEq.alg_order(sde_solver), OrdinaryDiffEq.alg_order(ode_solver))
+γ = 1.5
+println("Step size: ε^($(2 / γ))")
+dts = [ε^(2 / γ) for ε in εs]
+
+# Check that the step size is small enough so that the numerical error does not dominate the
+# theoretical.
+# This is used to inform the range of ε values and the choice of γ above.
+er = range(minimum(εs); stop = maximum(εs), step = 0.001)
+dtr = er .^ (2 / γ)
+plot(
+    log10.(er),
+    log10.(dtr .^ (1.5) + #StochasticDiffEq.alg_order(sde_solver)) +
+           dtr .^ (OrdinaryDiffEq.alg_order(ode_solver)));
+    label = "numerical",
+    xlabel = L"\log(\varepsilon)",
+    ylabel = L"Err",
+)
+plot!(log10.(er), log10.(er .^ 2); label = "theory")
+plot!(
+    log10.(er),
+    log10.(er .^ 2 +
+           dtr .^ (1.5) + #(StochasticDiffEq.alg_order(sde_solver)) +
+           dtr .^ (OrdinaryDiffEq.alg_order(ode_solver)));
+    label = "total",
+)
 
 # Naming convention for data and figure outputs.
 name = "$(model.name)_$(space_time.x₀)_[$(space_time.t₀),$(space_time.T)]_I"
@@ -100,21 +131,22 @@ theorem_validation(
     y_rels,
     z_rels,
     gauss_z_rels,
-    gauss_y_rels,
+    # gauss_y_rels,
     model,
     space_time,
     εs,
     dts,
     rs;
     ode_solver = ode_solver,
-    legend_idx = 2,
+    legend_idx = 5,
     plot_attrs = plot_attrs,
 )
 
 ################## Stochastic sensitivity calculations ##################
+include("analysis.jl")
 # Create a grid of initial conditions
-xs = collect(range(0; stop = π, length = 1000))
-ys = collect(range(0; stop = π, length = 1000))
+xs = collect(range(0; stop = π, length = 100))
+ys = collect(range(0; stop = π, length = 100))
 x₀_grid = reshape([collect(pairs) for pairs in Base.product(xs, ys)][:], length(xs), length(ys))
 
 # Time interval of interest
@@ -127,35 +159,20 @@ dx = 0.001
 # Pick a threshold value for extracting coherent sets
 threshold = 10.0
 
-# Varying the amplitude of the oscillatory perturbation
-# for ϵ in [0.3]#[0.0, 0.3]
 ϵ = 0.3
 model = ex_rossby(σ_id; ϵ = ϵ)
 
-# Compute the S² value for each initial condition, as the operator norm of Σ
-Σ_eigs = map(x₀_grid) do x
-    eigen(Σ_calculation(model, x, t₀, T, dt, dx, ode_solver)[2]).values
-end
-Sᵐ_grid = map(x -> x[1], Σ_eigs)'
-S²_grid = map(x -> x[2], Σ_eigs)'
-
-p = heatmap(xs, ys, log.(S²_grid); xlabel = L"x_1", ylabel = L"x_2", plot_attrs...)
-savefig(p, "output/s2_field_$(ϵ).pdf")
-
-# p = heatmap(xs, ys, log.(Sᵐ_grid); xlabel = L"x_1", ylabel = L"x_2", plot_attrs...)
-
-# Extract robust sets and plot
-R = S²_grid .< threshold
-p = heatmap(
-    xs,
-    ys,
-    R;
+S²_grid_sets(
+    model,
+    x₀_grid,
+    t₀,
+    T,
+    threshold,
+    dt,
+    dx,
+    "_$(ϵ)";
+    ode_solver = ode_solver,
     xlabel = L"x_1",
     ylabel = L"x_2",
-    c = cgrad([:white, :lightskyblue]),
-    cbar = false,
     plot_attrs...,
 )
-savefig(p, "output/s2_robust_$(ϵ).pdf")
-
-# end

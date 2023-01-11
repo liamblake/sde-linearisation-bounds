@@ -1,6 +1,8 @@
 using LinearAlgebra
 using Printf
+using Random
 
+using Distributions
 using Plots
 using Statistics
 
@@ -112,11 +114,14 @@ function add_lobf_to_plot!(p, x, y; intercept = true, annotation = nothing)
     end
 end
 
+"""
+
+"""
 function theorem_validation(
     y_rels,
     z_rels,
     gauss_z_rels,
-    gauss_y_rels,
+    # gauss_y_rels,
     model,
     space_time,
     εs,
@@ -131,23 +136,29 @@ function theorem_validation(
 
     nε = length(εs)
     nr = length(rs)
+    N = size(y_rels)[3]
 
     # Preallocate storage of results
-    y_abs_diff = Array{Float64}(undef, (nr, nε))
-    z_abs_diff = Array{Float64}(undef, (nr, nε))
-    z_means = Array{Float64}(undef, nε, 2)
-    y_means = Array{Float64}(undef, nε, 2)
+    # y_abs_diff = Array{Float64}(undef, nr, nε)
+    z_abs_diff = Array{Float64}(undef, nr, nε)
+    z_ξ_abs_diff = Vector{Float64}(undef, nε)
+    z_means = Array{Float64}(undef, nε, model.d)
+    y_means = Array{Float64}(undef, nε, model.d)
     sample_S2s = Vector{Float64}(undef, nε)
 
     # Only plot histograms if working in 2D
     plot_histograms = (model.d == 2)
     S2 = 1.0
+    Σ = zeros(model.d, model.d)
 
     for (i, ε) in enumerate(εs)
         # Calculate the deviation covariance from the integral expression
         w, Σ = Σ_calculation(model, x₀, t₀, T - dts[i], dts[i], 0.001, ode_solver)
         # Theoretical stochastic sensitivity - the maximum eigenvalue of Σ
         S2 = opnorm(Matrix(Σ))
+
+        # Generate independent realisations from the limiting distribution
+        ξs = rand(MvNormal(zeros(model.d), Σ), N)
 
         # Diagnostics - mean should be zero
         y_means[i, :] = mean(y_rels[i, :, :] .- w; dims = 2)
@@ -156,6 +167,10 @@ function theorem_validation(
         # Calculate the normed distance between the scaled deviation and the solution,
         # in order to estimate 𝔼[|z_ε - z|ʳ]
         z_diffs = pnorm(z_rels[i, :, :] .- gauss_z_rels[i, :, :]; dims = 1)
+
+        # Calculate the squared normed distance between the scaled deviations and the
+        # independent Gaussian realisations
+        z_ξ_abs_diff[i] = mean(pnorm(z_rels[i, :, :] .- ξs; dims = 1) .^ 2)
 
         # Calculate the sample covariance matrices
         s_mean_y = mean(y_rels[i, :, :]; dims = 2)
@@ -179,7 +194,6 @@ function theorem_validation(
                 xlabel = L"y_1",
                 ylabel = L"y_2",
                 legend = (i == legend_idx),
-                cbar = true,
                 c = cgrad(PALETTE; rev = true),
                 label = "",
                 grid = false,
@@ -213,7 +227,6 @@ function theorem_validation(
                 xlabel = L"z_1",
                 ylabel = L"z_2",
                 legend = (i == legend_idx),
-                cbar = true,
                 c = cgrad(PALETTE; rev = true),
                 label = "",
                 grid = false,
@@ -398,4 +411,73 @@ function theorem_validation(
         annotation = slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}",
     )
     save_figure(p, "$(name)/z_norm_mean.pdf")
+
+    # Plots of difference between realisations and independent Gaussian samples
+    corr_const = 4 * tr(Σ)
+    p = scatter(log10.(εs), z_ξ_abs_diff; legend = false, grid = false, plot_attrs...)
+    plot!(
+        p,
+        log10.([minimum(εs), maximum(εs)]),
+        [corr_const, corr_const];
+        linestyle = :dash,
+        linecolor = :red,
+    )
+    save_figure(p, "$(name)/z_xi.pdf")
+
+    vals = log10.(z_ξ_abs_diff)
+    p = scatter(log10.(εs), vals; legend = false, grid = false, plot_attrs...)
+    add_lobf_to_plot!(
+        p,
+        log10.(εs),
+        vals;
+        annotation = slope -> L"\Gamma(\varepsilon) \sim \varepsilon^{%$slope}",
+    )
+    save_figure(p, "$(name)/z_xi_log.pdf")
+end
+
+"""
+S²_grid_sets(
+    model,
+    x₀_grid,
+    t₀,
+    T,
+    threshold,
+    dt,
+    dx,
+    fname_ext;
+    ode_solver = Euler(),
+    plot_attrs...,
+)
+
+Computes ...
+
+Arguments:
+
+
+"""
+function S²_grid_sets(
+    model,
+    x₀_grid,
+    t₀,
+    T,
+    threshold,
+    dt,
+    dx,
+    fname_ext;
+    ode_solver = Euler(),
+    plot_attrs...,
+)
+    # Compute the S² value for each initial condition, as the operator norm of Σ
+    S²_grid = map(x₀_grid) do x
+        opnorm(Σ_calculation(model, x, t₀, T, dt, dx, ode_solver)[2])
+    end
+
+    p = heatmap(xs, ys, log.(S²_grid)'; plot_attrs...)
+    savefig(p, "output/s2_field$(fname_ext).pdf")
+
+    # Extract robust sets and plot
+    R = S²_grid .< threshold
+    p = heatmap(xs, ys, R'; c = cgrad([:white, :lightskyblue]), cbar = false, plot_attrs...)
+
+    savefig(p, "output/s2_robust$(fname_ext).pdf")
 end
