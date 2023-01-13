@@ -12,6 +12,9 @@ include("analysis.jl")
 
 Random.seed!(3259245)
 
+# Use PyPlot backend for Plots
+pyplot()
+
 # Universal plot options - for consistent publication-sized figures
 # Default axis font size is 11 in Plots. Set the scale factor here to get the desired font size.
 # Other text objects are scaled automatically.
@@ -42,7 +45,7 @@ ode_solver = RK4()
 sde_solver = SRA3()
 
 # If true, generate new data (takes some time). If false, attempt to load previously saved data.
-GENERATE_DATA = true
+GENERATE_DATA = false
 
 ################## Theorem validation ##################
 ## ROSSBY MODEL WITH σ = Iₙ
@@ -81,7 +84,7 @@ plot(
     xlabel = L"\log(\varepsilon)",
     ylabel = L"Err",
 )
-plot!(log10.(er), log10.(er .^ 2); label = "theory")
+plot!(log10.(er), log10.(er .^ 2); label = "theory", linestyle = :dash)
 plot!(
     log10.(er),
     log10.(er .^ 2 +
@@ -142,11 +145,56 @@ theorem_validation(
     plot_attrs = plot_attrs,
 )
 
+################## Σ through time ##################
+sde_solver = EM()
+N = 10000
+ε = 0.03
+x₀ = SA[0.0, 1.0]
+dt = ε^2
+t₀ = 0.0
+ts = 0.1:0.1:1.0
+hist_idxs = 2:2:length(ts)
+
+for (σ, σ_label) in [(σ_id, "I")]#, ((x, _, t) -> SA[0.5+x 0.0; 0.0 1.0], "x_dir_vary")]
+
+    # Naming convention for data and figure outputs.
+    name = "$(model.name)_$(x₀)_fixed$(ε)_through[$(minimum(ts)),$(maximum(ts))]_$(σ_label)"
+    data_fname = "data/$(name).jld"
+
+    # Pre-allocation of output
+    time_rels = Array{Float64}(undef, length(ts), model.d, N)
+
+    GENERATE_DATA = false
+    if GENERATE_DATA
+        # Solve the SDE to generate new data
+        generate_time_data!(time_rels, model, ε, x₀, t₀, ts, N, dt)
+        save(data_fname, "rels", time_rels)
+    else
+        # Reload previously saved data
+        dat = load(data_fname)
+        time_rels .= dat["rels"]
+    end
+
+    include("analysis.jl")
+    Σ_through_time(
+        time_rels,
+        model,
+        ε,
+        x₀,
+        t₀,
+        ts,
+        dt,
+        σ_label;
+        hist_idxs = hist_idxs,
+        ode_solver = ode_solver,
+        plot_attrs...,
+    )
+end
+
 ################## Stochastic sensitivity calculations ##################
-include("analysis.jl")
 # Create a grid of initial conditions
-xs = collect(range(0; stop = π, length = 100))
-ys = collect(range(0; stop = π, length = 100))
+xs = collect(range(0; stop = π, length = 1000))
+ys = collect(range(0; stop = π, length = 1000))
 x₀_grid = reshape([collect(pairs) for pairs in Base.product(xs, ys)][:], length(xs), length(ys))
 
 # Time interval of interest

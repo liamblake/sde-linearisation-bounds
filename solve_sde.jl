@@ -20,7 +20,15 @@ function sde_realisations!(dest, vel!, σ, N, d_y, d_W, ε, y₀, t₀, T, dt, s
         (nothing, false)
     end
     ens = EnsembleProblem(sde_prob; output_func = output_func)
-    solve(ens, sde_solver, EnsembleThreads(); trajectories = N, dt = dt, save_everystep = false)
+    solve(
+        ens,
+        sde_solver,
+        EnsembleThreads();
+        trajectories = N,
+        dt = dt,
+        dtmax = dt,
+        save_everystep = false,
+    )
 
     nothing
 end
@@ -29,7 +37,7 @@ end
 
 Generate realisations of the SDE solution and the limiting solution.
 """
-function generate_data!(
+function generate_ε_data!(
     y_dest,
     z_dest,
     gauss_z_dest,
@@ -42,7 +50,7 @@ function generate_data!(
     ode_solver = Euler(),
     sde_solver = EM(),
 )
-    @unpack name, d, velocity, ∇u, σ = model
+    @unpack name, d, velocity, ∇u = model
     @unpack x₀, t₀, T = space_time
     nε = length(εs)
 
@@ -55,7 +63,7 @@ function generate_data!(
     # Calculate the deterministic trajectory. This is needed to form the limiting velocity field
     println("Solving for deterministic trajectory...")
     det_prob = ODEProblem(velocity, x₀, (t₀, T))
-    det_sol = solve(det_prob, ode_solver; dt = minimum(dts))
+    det_sol = solve(det_prob, ode_solver; dt = minimum(dts), dtmax = minimum(dts))
     w = last(det_sol.u)
 
     # Set up as a joint system so the same noise realisation is used.
@@ -101,5 +109,22 @@ function generate_data!(
         gauss_y_dest[i, :, :] .= ε * z_dest[i, :, :] .+ w
     end
 
+    nothing
+end
+
+function generate_time_data!(dest, model, ε, x₀, t₀, ts, N, dt)
+    @unpack name, d, velocity, σ = model
+
+    function εσ(x, _, t)
+        return ε * σ(x, nothing, t)
+    end
+
+    # Ensure destination is of the the expected size
+    @assert size(dest) == (length(ts), d, N)
+
+    println("Generating realisations through time...")
+    @showprogress for (i, t) in enumerate(ts)
+        sde_realisations!(@view(dest[i, :, :]), velocity, εσ, N, d, d, ε, x₀, t₀, t, dt, sde_solver)
+    end
     nothing
 end
