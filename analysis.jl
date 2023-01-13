@@ -106,7 +106,7 @@ Add a line of best fit to a given plot, with an optional annotation.
 function add_lobf_to_plot!(p, x, y; intercept = true, annotation = nothing)
     fit, coefs = lobf(x, y; intercept = intercept)
     slope = round(coefs[2]; digits = 2)
-    plot!(p, x, fit; linecolor = :red, linestyle = :dash)
+    plot!(p, x, fit; linecolor = :red)
 
     # Add an annotation with the given label
     if annotation !== nothing
@@ -217,7 +217,7 @@ function theorem_validation(
                 linestyle = :dash,
                 label = "Empirical",
             )
-            save_figure(p, "$(name)/y_histogram_$(@sprintf("%.3f", ε)).pdf")
+            save_figure(p, "$(name)/y_histogram_$(@sprintf("%.7f", ε)).pdf")
 
             # The scaled deviations z_ε
             p = histogram2d(
@@ -250,7 +250,7 @@ function theorem_validation(
                 linestyle = :dash,
                 label = "Empirical",
             )
-            save_figure(p, "$(name)/z_histogram_$(@sprintf("%.3f", ε)).pdf")
+            save_figure(p, "$(name)/z_histogram_$(@sprintf("%.7f", ε)).pdf")
         end
     end
 
@@ -433,6 +433,91 @@ function theorem_validation(
         annotation = slope -> L"\Gamma(\varepsilon) \sim \varepsilon^{%$slope}",
     )
     save_figure(p, "$(name)/z_xi_log.pdf")
+end
+
+function Σ_through_time(
+    rels,
+    model,
+    ε,
+    x₀,
+    t₀,
+    ts,
+    dt,
+    σ_label;
+    hist_idxs = 1:length(ts),
+    ode_solver = Euler(),
+    plot_attrs...,
+)
+    T = maximum(ts)
+    name = "$(model.name)_$(x₀)_[$(t₀),$(T)]"
+
+    # Solve for the full deterministic trajectory
+    det_prob = ODEProblem(model.velocity, x₀, (t₀, T))
+    det_sol = solve(det_prob, ode_solver; dt = dt, dtmax = dt)
+
+    traj_plot = plot()
+
+    S²_vals = Vector{Float64}(undef, length(ts))
+    sample_S²_vals = Vector{Float64}(undef, length(ts))
+    ws = Vector{Vector{Float64}}(undef, length(ts))
+    Σs = Vector{Matrix{Float64}}(undef, length(ts))
+    for (i, t) in enumerate(ts)
+        w, Σ = Σ_calculation(model, x₀, t₀, t, dt, 0.001, ode_solver)
+        ws[i] = w
+        Σs[i] = Σ
+        S²_vals[i] = opnorm(Σ)
+        sample_S²_vals[i] = opnorm(cov((rels[i, :, :] .- w) ./ ε; dims = 2))
+
+        if i in hist_idxs
+            histogram2d!(
+                traj_plot,
+                rels[i, 1, :],
+                rels[i, 2, :];
+                bins = 100,
+                c = cgrad(PALETTE; rev = true),
+            )
+        end
+    end
+
+    # Plot the deterministic trajectory (above the histograms, below the SD bounds)
+    plot!(
+        traj_plot,
+        det_sol;
+        idxs = (1, 2),
+        linecolor = :gray,
+        linewidth = 0.5,
+        grid = false,
+        legend = false,
+        xlabel = L"x_1",
+        ylabel = L"x_2",
+        plot_attrs...,
+    )
+
+    # Plot the covariance visualisations
+    for i in hist_idxs
+        bivariate_std_dev(
+            ws[i],
+            ε^2 * Σs[i];
+            nσ = 2,
+            plt = traj_plot,
+            linecolor = :black,
+            linewidth = 0.5,
+        )
+    end
+
+    save_figure(traj_plot, "$(name)/time_traj_$(σ_label).pdf")
+
+    p = scatter(
+        ts,
+        sample_S²_vals;
+        markercolor = :black,
+        label = L"Limiting ($S^2(x,t)$)",
+        grid = false,
+        xlabel = L"t",
+        ylabel = "Covariance operator norm",
+    )
+    scatter!(p, ts, S²_vals; markercolor = :transparent, markerstrokecolor = :red, label = "Sample")
+    save_figure(p, "$(name)/time_S2_$(σ_label).pdf")
 end
 
 """
