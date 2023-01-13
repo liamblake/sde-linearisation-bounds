@@ -4,7 +4,6 @@ using Random
 using DifferentialEquations
 using JLD
 using LaTeXStrings
-using Plots
 
 include("models.jl")
 include("solve_sde.jl")
@@ -12,29 +11,29 @@ include("analysis.jl")
 
 Random.seed!(3259245)
 
-# Use PyPlot backend for Plots
-pyplot()
-
 # Universal plot options - for consistent publication-sized figures
 # Default axis font size is 11 in Plots. Set the scale factor here to get the desired font size.
 # Other text objects are scaled automatically.
-Plots.scalefontsizes()
-Plots.scalefontsizes(15.0 / 11.0)
-# Specify the figure height and width in pixels
-fig_height = 600
-fig_width = fig_height / 1.4
-# Include any other plot attributes here
-plot_attrs = Dict(
-    :size => (fig_height, fig_width),
-    :markercolor => :black,
-    # Margin padding when exporting figures
-    :left_margin => 2Plots.mm,
-    :top_margin => 2Plots.mm,
-    :bottom_margin => 2Plots.mm,
-    :top_margin => 2Plots.mm,
-    # Colorbar options
-    :colorbar => :top,
-)
+# Plots.scalefontsizes()
+# Plots.scalefontsizes(15.0 / 11.0)
+# # Specify the figure height and width in pixels
+# fig_height = 600
+# fig_width = fig_height / 1.4
+# # Universal plot attributes - applied to every generated plot.
+plot_attrs = Dict()
+#     :size => (fig_height, fig_width),
+#     # Always place colorbar on top
+#     :colorbar => :top,
+#     # Use a box axis frame style
+#     :framestyle => :box,
+#     # No grids
+#     :grid => false,
+#     # Margin padding
+#     :left_margin => 2Plots.mm,
+#     :top_margin => 2Plots.mm,
+#     :bottom_margin => 2Plots.mm,
+#     :top_margin => 2Plots.mm,
+# )
 
 # Specify the ODE and SDE solvers, as provided by DifferentialEquations.jl
 # ODE solvers: https://docs.sciml.ai/DiffEqDocs/stable/solvers/ode_solve/
@@ -42,7 +41,7 @@ plot_attrs = Dict(
 # Note that the order of each solver must be compatible with the step sizes. See the supplementary
 # materials for details.
 ode_solver = RK4()
-sde_solver = SRA3()
+sde_solver = SRA1()
 
 # If true, generate new data (takes some time). If false, attempt to load previously saved data.
 GENERATE_DATA = false
@@ -66,32 +65,10 @@ rs = [1, 2, 3, 4]
 # be set manually if desired.
 println("Order of SDE solver: $(StochasticDiffEq.alg_order(sde_solver))")
 println("Order of ODE solver: $(OrdinaryDiffEq.alg_order(ode_solver))")
-γ = min(StochasticDiffEq.alg_order(sde_solver), OrdinaryDiffEq.alg_order(ode_solver))
+# γ = min(StochasticDiffEq.alg_order(sde_solver), OrdinaryDiffEq.alg_order(ode_solver))
 γ = 1.5
 println("Step size: ε^($(2 / γ))")
 dts = [ε^(2 / γ) for ε in εs]
-
-# Check that the step size is small enough so that the numerical error does not dominate the
-# theoretical.
-# This is used to inform the range of ε values and the choice of γ above.
-er = range(minimum(εs); stop = maximum(εs), step = 0.001)
-dtr = er .^ (2 / γ)
-plot(
-    log10.(er),
-    log10.(dtr .^ (1.5) + #StochasticDiffEq.alg_order(sde_solver)) +
-           dtr .^ (OrdinaryDiffEq.alg_order(ode_solver)));
-    label = "numerical",
-    xlabel = L"\log(\varepsilon)",
-    ylabel = L"Err",
-)
-plot!(log10.(er), log10.(er .^ 2); label = "theory", linestyle = :dash)
-plot!(
-    log10.(er),
-    log10.(er .^ 2 +
-           dtr .^ (1.5) + #(StochasticDiffEq.alg_order(sde_solver)) +
-           dtr .^ (OrdinaryDiffEq.alg_order(ode_solver)));
-    label = "total",
-)
 
 # Naming convention for data and figure outputs.
 name = "$(model.name)_$(space_time.x₀)_[$(space_time.t₀),$(space_time.T)]_I"
@@ -192,35 +169,37 @@ for (σ, σ_label) in [(σ_id, "I")]#, ((x, _, t) -> SA[0.5+x 0.0; 0.0 1.0], "x_
 end
 
 ################## Stochastic sensitivity calculations ##################
-# Create a grid of initial conditions
-xs = collect(range(0; stop = π, length = 1000))
-ys = collect(range(0; stop = π, length = 1000))
-x₀_grid = reshape([collect(pairs) for pairs in Base.product(xs, ys)][:], length(xs), length(ys))
+if false
+    # Create a grid of initial conditions
+    xs = collect(range(0; stop = π, length = 1000))
+    ys = collect(range(0; stop = π, length = 1000))
+    x₀_grid = reshape([collect(pairs) for pairs in Base.product(xs, ys)][:], length(xs), length(ys))
 
-# Time interval of interest
-t₀ = 0.0
-T = 1.0
-# Temporal and spatial discretisation for stochastic sensitivity calculations
-dt = 0.01
-dx = 0.001
+    # Time interval of interest
+    t₀ = 0.0
+    T = 1.0
+    # Temporal and spatial discretisation for stochastic sensitivity calculations
+    dt = 0.01
+    dx = 0.001
 
-# Pick a threshold value for extracting coherent sets
-threshold = 10.0
+    # Pick a threshold value for extracting coherent sets
+    threshold = 10.0
 
-ϵ = 0.3
-model = ex_rossby(σ_id; ϵ = ϵ)
+    ϵ = 0.3
+    model = ex_rossby(σ_id; ϵ = ϵ)
 
-S²_grid_sets(
-    model,
-    x₀_grid,
-    t₀,
-    T,
-    threshold,
-    dt,
-    dx,
-    "_$(ϵ)";
-    ode_solver = ode_solver,
-    xlabel = L"x_1",
-    ylabel = L"x_2",
-    plot_attrs...,
-)
+    S²_grid_sets(
+        model,
+        x₀_grid,
+        t₀,
+        T,
+        threshold,
+        dt,
+        dx,
+        "_$(ϵ)";
+        ode_solver = ode_solver,
+        xlabel = L"x_1",
+        ylabel = L"x_2",
+        plot_attrs...,
+    )
+end
