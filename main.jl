@@ -12,14 +12,15 @@ include("analysis.jl")
 Random.seed!(3259245)
 
 # Universal plot options - for consistent publication-sized figures
+scale_factor = 2.0
 fig_width_cm = 11.0
 fig_height_cm = fig_width_cm / 1.4
 # 1 inch ≡ 72pt ⟺ 1 cm ≡ 72 / 2.54 pt
 set_theme!(
     Theme(;
         fonts = (; regular = "CM"),
-        fontsize = 11,
-        resolution = 72.0 / 2.54 .* (fig_width_cm, fig_height_cm),
+        fontsize = scale_factor * 11,
+        resolution = scale_factor * 72.0 / 2.54 .* (fig_width_cm, fig_height_cm),
     ),
 )
 
@@ -44,7 +45,7 @@ model = ex_rossby(σ_id)
 space_time = SpaceTime(SA[0.0, 1.0], 0.0, 1.0)
 
 # The number of realisations to work with (overwritten if loading data)
-N = 100
+N = 1000
 
 rs = [1, 2, 3, 4]
 # The values of ε to consider
@@ -118,6 +119,7 @@ t₀ = 0.0
 ts = 0.1:0.1:1.0
 hist_idxs = 2:2:length(ts)
 
+include("analysis.jl")
 for (σ, σ_label) in [(σ_id, "I")]#, ((x, _, t) -> SA[0.5+x 0.0; 0.0 1.0], "x_dir_vary")]
 
     # Naming convention for data and figure outputs.
@@ -138,7 +140,6 @@ for (σ, σ_label) in [(σ_id, "I")]#, ((x, _, t) -> SA[0.5+x 0.0; 0.0 1.0], "x_
         time_rels .= dat["rels"]
     end
 
-    include("analysis.jl")
     Σ_through_time(
         time_rels,
         model,

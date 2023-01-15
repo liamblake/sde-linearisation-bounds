@@ -171,7 +171,7 @@ function theorem_validation(
 
         if plot_histograms
             # Plot a histogram of the realisations, with covariance bounds
-            p, ax, _ = hexbin(
+            p, ax, hb = hexbin(
                 y_rels[i, 1, :],
                 y_rels[i, 2, :];
                 bins = 100,
@@ -179,12 +179,15 @@ function theorem_validation(
                 xlabel = L"y_1",
                 ylabel = L"y_2",
             )
+
+            # Add the colourbar above the plot
+            Colorbar(p[1, 1], hb; vertical = false)
+
             bivariate_std_dev!(
                 ax,
                 w,
                 ε^2 * Σ;
                 nσ = 3,
-                plt = p,
                 colour = :black,
                 linestyle = :solid,
                 label = "Theory",
@@ -194,7 +197,6 @@ function theorem_validation(
                 s_mean_y,
                 S_y;
                 nσ = 3,
-                plt = p,
                 colour = :red,
                 linestyle = :dash,
                 label = "Sample",
@@ -251,12 +253,14 @@ function Σ_through_time(
     det_prob = ODEProblem(model.velocity, x₀, (t₀, T))
     det_sol = solve(det_prob, ode_solver; dt = dt, dtmax = dt)
 
-    traj_plot = plot()
+    traj_fig = Figure()
+    traj_ax = Axis(traj_fig[2, 1]; xlabel = L"x_1", ylabel = L"x_2")
 
     S²_vals = Vector{Float64}(undef, length(ts))
     sample_S²_vals = Vector{Float64}(undef, length(ts))
     ws = Vector{Vector{Float64}}(undef, length(ts))
     Σs = Vector{Matrix{Float64}}(undef, length(ts))
+
     for (i, t) in enumerate(ts)
         w, Σ = Σ_calculation(model, x₀, t₀, t, dt, 0.001, ode_solver)
         ws[i] = w
@@ -265,55 +269,47 @@ function Σ_through_time(
         sample_S²_vals[i] = opnorm(cov((rels[i, :, :] .- w) ./ ε; dims = 2))
 
         if i in hist_idxs
-            histogram2d!(
-                traj_plot,
+            hexbin!(
+                traj_ax,
                 rels[i, 1, :],
                 rels[i, 2, :];
                 bins = 100,
-                c = cgrad(PALETTE; rev = true),
+                colormap = cgrad(PALETTE; rev = true),
             )
         end
     end
 
     # Plot the deterministic trajectory (above the histograms, below the SD bounds)
-    plot!(
-        traj_plot,
-        det_sol;
-        idxs = (1, 2),
-        linecolor = :gray,
-        linewidth = 0.5,
-        grid = false,
-        legend = false,
-        xlabel = L"x_1",
-        ylabel = L"x_2",
-        plot_attrs...,
-    )
+    sol_through_time_x = det_sol.(t₀:dt:T, idxs = 1)
+    sol_through_time_y = det_sol.(t₀:dt:T, idxs = 2)
+    lines!(sol_through_time_x, sol_through_time_y; color = :gray, linewidth = 0.5)
 
     # Plot the covariance visualisations
     for i in hist_idxs
-        bivariate_std_dev(
-            ws[i],
-            ε^2 * Σs[i];
-            nσ = 2,
-            plt = traj_plot,
-            linecolor = :black,
-            linewidth = 0.5,
-        )
+        bivariate_std_dev!(traj_ax, ws[i], ε^2 * Σs[i]; nσ = 2, linecolor = :black, linewidth = 0.5)
     end
 
-    save_figure(traj_plot, "$(name)/time_traj_$(σ_label).pdf")
+    save_figure(traj_fig, "$(name)/time_traj_$(σ_label).pdf")
 
-    p = scatter(
+    p, ax, _ = scatter(
         ts,
         sample_S²_vals;
-        markercolor = :black,
+        color = :black,
         label = L"Limiting ($S^2(x,t)$)",
-        grid = false,
-        xlabel = L"t",
-        ylabel = "Covariance operator norm",
-        legend_position = :topleft,
+        axis = (; xlabel = L"t", ylabel = "Covariance operator norm"),
     )
-    scatter!(p, ts, S²_vals; markercolor = :transparent, markerstrokecolor = :red, label = "Sample")
+    scatter!(
+        ax,
+        ts,
+        S²_vals;
+        color = :transparent,
+        strokewidth = 1.5,
+        strokecolor = :red,
+        label = "Sample",
+    )
+    hidedecorations!(ax; label = false, ticklabels = false, ticks = false)
+    axislegend(ax; halign = :left, valign = :top)
+
     save_figure(p, "$(name)/time_S2_$(σ_label).pdf")
 end
 
