@@ -32,7 +32,7 @@ function save_figure(p, fname; show_print = true)
     if show_print
         println("Saving figure to $(path)")
     end
-    save(path, p)
+    save(path, p; pt_per_unit = 1)
 end
 
 """
@@ -67,7 +67,7 @@ function bivariate_std_dev!(ax, μ, Σ; nσ = 1, colour = :black, label = "", kw
     end
 
     # Also plot the mean
-    scatter!(ax, [μ[1]], [μ[2]]; markersize = 12, color = colour, label = "")
+    scatter!(ax, [μ[1]], [μ[2]]; markersize = 3, color = colour, label = "")
 end
 
 """
@@ -201,39 +201,6 @@ function theorem_validation(
             )
 
             save_figure(p, "$(name)/y_histogram_$(@sprintf("%.7f", ε)).pdf")
-
-            # p = histogram2d(
-            #     y_rels[i, 1, :],
-            #     y_rels[i, 2, :];
-            #     bins = 100,
-            #     xlabel = L"y_1",
-            #     ylabel = L"y_2",
-            #     legend = (i == legend_idx),
-            #     c = cgrad(PALETTE; rev = true),
-            #     label = "",
-            #     grid = false,
-            #     plot_attrs...,
-            # )
-            # p = bivariate_std_dev(
-            #     w,
-            #     ε^2 * Σ;
-            #     nσ = 3,
-            #     plt = p,
-            #     colour = :black,
-            #     linestyle = :solid,
-            #     label = "Theory",
-            # )
-            # p = bivariate_std_dev(
-            #     s_mean_y,
-            #     S_y;
-            #     nσ = 3,
-            #     plt = p,
-            #     colour = :red,
-            #     linestyle = :dash,
-            #     label = "Empirical",
-            # )
-            # save_figure(p, "$(name)/y_histogram_$(@sprintf('%.7f', ε)).pdf")
-
         end
     end
 
@@ -262,28 +229,6 @@ function theorem_validation(
             ylabel = L"\log_{10}{\,\Gamma_{S^2}(\varepsilon)}",
         ),
     )
-
-    # plot_log_with_lobf(
-    #     εs,
-    #     pnorm(y_means; dims = 2),
-    #     "$(name)/y_norm_mean.pdf";
-    #     annotation = slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}",
-    #     axis = (;
-    #         xlabel = L"\log_{10}{\,\varepsilon}",
-    #         ylabel = L"\log_{10}{\,\Gamma_{E}(\varepsilon)}",
-    #     ),
-    # )
-
-    # plot_log_with_lobf(
-    #     εs,
-    #     pnorm(z_means; dims = 2),
-    #     "$(name)/z_norm_mean.pdf";
-    #     annotation = slope -> L"\Gamma_{E}(\varepsilon) \sim \varepsilon^{%$slope}",
-    #     axis = (;
-    #         xlabel = L"\log_{10}{\,\varepsilon}",
-    #         ylabel = L"\log_{10}{\,\Gamma_{E}(\varepsilon)}",
-    #     ),
-    # )
 end
 
 function Σ_through_time(
@@ -394,7 +339,8 @@ Arguments:
 """
 function S²_grid_sets(
     model,
-    x₀_grid,
+    xs,
+    ys,
     t₀,
     T,
     threshold,
@@ -405,16 +351,17 @@ function S²_grid_sets(
     plot_attrs...,
 )
     # Compute the S² value for each initial condition, as the operator norm of Σ
-    S²_grid = map(x₀_grid) do x
-        opnorm(Σ_calculation(model, x, t₀, T, dt, dx, ode_solver)[2])
+    S²_grid = map(collect(Base.product(xs, ys))) do pair
+        opnorm(Σ_calculation(model, [pair[1], pair[2]], t₀, T, dt, dx, ode_solver)[2])
     end
 
-    p = heatmap(xs, ys, log.(S²_grid)'; plot_attrs...)
-    savefig(p, "output/s2_field$(fname_ext).pdf")
+    f, _, p = heatmap(xs, ys, log.(S²_grid); colormap = :winter, plot_attrs...)
+    Colorbar(f, p)
+    save_figure(p, "s2_field$(fname_ext).pdf")
 
     # Extract robust sets and plot
     R = S²_grid .< threshold
-    p = heatmap(xs, ys, R'; c = cgrad([:white, :lightskyblue]), cbar = false, plot_attrs...)
+    p = heatmap(xs, ys, R; colormap = cgrad([:white, :lightskyblue]), plot_attrs...)
 
-    savefig(p, "output/s2_robust$(fname_ext).pdf")
+    save_figure(p, "s2_robust$(fname_ext).pdf")
 end
