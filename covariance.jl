@@ -73,13 +73,17 @@ end
 Calculate the deviation covariance matrix Σ with an in-place specification of the velocity field.
 """
 function Σ_calculation(model, x₀, t₀, T, dt, dx, ode_solver)
-    @unpack d, velocity, ∇u = model
+    @unpack d, velocity, ∇u, σ = model
 
     ts = t₀:dt:T
+    if last(ts) < T
+        ts = range(t₀; stop = T, length = length(ts) + 1)
+    end
+
     # Generate the required flow map data
     # First, advect the initial condition forward to obtain the final position
     prob = ODEProblem(velocity, x₀, (t₀, T))
-    det_sol = solve(prob, ode_solver; dt = dt, dtmax = dt, saveat = dt)
+    det_sol = solve(prob, ode_solver; dt = dt, dtmax = dt, saveat = ts)
     w = last(det_sol)
 
     # Calculate the flow map gradients by solving the equation of variations directly
@@ -99,7 +103,7 @@ function Σ_calculation(model, x₀, t₀, T, dt, dx, ode_solver)
         EnsembleThreads();
         dt = dt,
         dtmax = dt,
-        saveat = dt,
+        saveat = ts,
         trajectories = 2 * d,
     )
 
@@ -111,8 +115,12 @@ function Σ_calculation(model, x₀, t₀, T, dt, dx, ode_solver)
     # Approximate the flow map gradient at each time step
     ∇Fs = ∇F.(eachslice(star_values; dims = 1), d, dx)
 
-    # TODO: Work with non-identity σ
-    Ks = [last(∇Fs)] .* inv.(∇Fs)
+    # Evaluate σ along the trajectory
+    σs = σ.(det_sol.(ts), nothing, ts)
+
+    # Evaluate the integrand at each time point.
+    # See Theorem 2.2 for the integral form of Σ.
+    Ks = [last(∇Fs)] .* inv.(∇Fs) .* σs
     integrand = Ks .* transpose.(Ks)
 
     # Approximate an integral given discrete evaluations, using the composite Simpson's rule

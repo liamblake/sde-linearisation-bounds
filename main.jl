@@ -30,22 +30,25 @@ set_theme!(
 # Note that the order of each solver must be compatible with the step sizes. See the supplementary
 # materials for details.
 ode_solver = RK4()
-sde_solver = EM()
+sde_solver = SRA1()
 
-# If true, generate new data (takes some time). If false, attempt to load previously saved data.
-GENERATE_DATA = false
-
-################## Theorem validation ##################
+################## Model specification ##################
 ## ROSSBY MODEL WITH σ = Iₙ
 function σ_id(_, _, _)
     SA[1.0 0.0; 0.0 1.0]
 end
 model = ex_rossby(σ_id)
+
+################## Data generation ##################
+# If true, generate new data (takes some time). If false, attempt to load previously saved data.
+GENERATE_DATA = true
+
+# The number of realisations to work with (must match saved if loading data)
+N = 100
+
+################## Theorem validation ##################
 # Define the initial condition and finite-time interval
 space_time = SpaceTime(SA[0.0, 1.0], 0.0, 1.0)
-
-# The number of realisations to work with (overwritten if loading data)
-N = 1000
 
 rs = [1, 2, 3, 4]
 # The values of ε to consider
@@ -55,7 +58,7 @@ rs = [1, 2, 3, 4]
 println("Order of SDE solver: $(StochasticDiffEq.alg_order(sde_solver))")
 println("Order of ODE solver: $(OrdinaryDiffEq.alg_order(ode_solver))")
 γ = min(StochasticDiffEq.alg_order(sde_solver), OrdinaryDiffEq.alg_order(ode_solver))
-# γ = 1.5
+# γ = 1.0
 println("Step size: ε^($(2 / γ))")
 dts = [ε^(2 / γ) for ε in εs]
 
@@ -67,12 +70,11 @@ data_fname = "data/$(name).jld"
 y_rels = Array{Float64}(undef, length(εs), model.d, N)
 z_rels = Array{Float64}(undef, length(εs), model.d, N)
 gauss_z_rels = Array{Float64}(undef, length(εs), model.d, N)
-gauss_y_rels = Array{Float64}(undef, length(εs), model.d, N)
 
 if GENERATE_DATA
     # Solve the SDE to generate new data
-    generate_ε_data!(y_rels, z_rels, gauss_z_rels, gauss_y_rels, model, space_time, N, εs, dts)
-    save(data_fname, "y", y_rels, "z", z_rels, "gauss_z", gauss_z_rels, "gauss_y", gauss_y_rels)
+    generate_ε_data!(y_rels, z_rels, gauss_z_rels, model, space_time, N, εs, dts)
+    save(data_fname, "y", y_rels, "z", z_rels, "gauss_z", gauss_z_rels)
 
 else
     # Reload previously saved data
@@ -80,10 +82,9 @@ else
     y_rels .= dat["y"]
     z_rels .= dat["z"]
     gauss_z_rels .= dat["gauss_z"]
-    gauss_y_rels .= dat["gauss_y"]
 
     # Ensure sizes make sense
-    @assert size(y_rels) == size(z_rels) == size(gauss_z_rels) == size(gauss_y_rels)
+    @assert size(y_rels) == size(z_rels) == size(gauss_z_rels)
     @assert size(y_rels)[1] == length(εs)
 
     # Overwrite the number of realisations with whatever is in the file
@@ -119,7 +120,6 @@ t₀ = 0.0
 ts = 0.1:0.1:1.0
 hist_idxs = 2:2:length(ts)
 
-include("analysis.jl")
 for (σ, σ_label) in [(σ_id, "I")]#, ((x, _, t) -> SA[0.5+x 0.0; 0.0 1.0], "x_dir_vary")]
 
     # Naming convention for data and figure outputs.
@@ -158,7 +158,6 @@ end
 # Create a grid of initial conditions
 xs = collect(range(0; stop = π, length = 100))
 ys = collect(range(0; stop = π, length = 100))
-# x₀_grid = reshape([collect(pairs) for pairs in Base.product(xs, ys)][:], length(xs), length(ys))
 
 # Time interval of interest
 t₀ = 0.0
@@ -173,16 +172,5 @@ threshold = 10.0
 ϵ = 0.3
 model = ex_rossby(σ_id; ϵ = ϵ)
 
-S²_grid_sets(
-    model,
-    xs,
-    ys,
-    t₀,
-    T,
-    threshold,
-    dt,
-    dx,
-    "_$(ϵ)";
-    ode_solver = ode_solver,
-    axis = (; xlabel = L"x_1", ylabel = L"x_2"),
-)
+include("analysis.jl")
+S²_grid_sets(model, xs, ys, t₀, T, threshold, dt, dx, "_$(ϵ)"; ode_solver = ode_solver)

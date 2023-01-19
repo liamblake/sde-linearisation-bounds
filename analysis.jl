@@ -101,7 +101,8 @@ function plot_log_with_lobf(x, y, save_dir; annotation = s -> "", kwargs...)
     # Add a line of best fit
     fit, coefs = lobf(logx, logy)
     slope = round(coefs[2]; digits = 2)
-    lines!(ax, logx, fit; color = :red, text = annotation(slope))
+    lines!(ax, logx, fit; color = :red)
+    # text!(annotation(slope); align = (:left, :top))
 
     save_figure(p, save_dir)
 end
@@ -138,13 +139,12 @@ function theorem_validation(
     sample_S2s = Vector{Float64}(undef, nε)
 
     # Only plot histograms if working in 2D
-    plot_histograms = (model.d == 2)
+    plot_histograms = (model.d == 2) && false
     S2 = 1.0
-    Σ = zeros(model.d, model.d)
 
     for (i, ε) in enumerate(εs)
         # Calculate the deviation covariance from the integral expression
-        w, Σ = Σ_calculation(model, x₀, t₀, T - dts[i], dts[i], 0.001, ode_solver)
+        w, Σ = Σ_calculation(model, x₀, t₀, T, dts[i], 0.001, ode_solver)
         # Theoretical stochastic sensitivity - the maximum eigenvalue of Σ
         S2 = opnorm(Matrix(Σ))
 
@@ -171,17 +171,18 @@ function theorem_validation(
 
         if plot_histograms
             # Plot a histogram of the realisations, with covariance bounds
-            p, ax, hb = hexbin(
+            p = Figure()
+            ax = Axis(p[2, 1]; xlabel = L"y_1", ylabel = L"y_2")
+            hb = hexbin!(
+                ax,
                 y_rels[i, 1, :],
                 y_rels[i, 2, :];
                 bins = 100,
                 colormap = cgrad(PALETTE; rev = true),
-                xlabel = L"y_1",
-                ylabel = L"y_2",
             )
 
             # Add the colourbar above the plot
-            Colorbar(p[1, 1], hb; vertical = false)
+            # Colorbar(p[1, 1], hb; vertical = false)
 
             bivariate_std_dev!(
                 ax,
@@ -201,6 +202,10 @@ function theorem_validation(
                 linestyle = :dash,
                 label = "Sample",
             )
+
+            if i == legend_idx
+                axislegend(ax)
+            end
 
             save_figure(p, "$(name)/y_histogram_$(@sprintf("%.7f", ε)).pdf")
         end
@@ -351,13 +356,27 @@ function S²_grid_sets(
         opnorm(Σ_calculation(model, [pair[1], pair[2]], t₀, T, dt, dx, ode_solver)[2])
     end
 
-    f, _, p = heatmap(xs, ys, log.(S²_grid); colormap = :winter, plot_attrs...)
+    f, _, p = heatmap(
+        xs,
+        ys,
+        log.(S²_grid);
+        colormap = Reverse(:winter),
+        fxaa = false,
+        axis = (; xlabel = L"x_1", ylabel = L"x_2"),
+    )
     Colorbar(f, p)
     save_figure(p, "s2_field$(fname_ext).pdf")
 
     # Extract robust sets and plot
     R = S²_grid .< threshold
-    p = heatmap(xs, ys, R; colormap = cgrad([:white, :lightskyblue]), plot_attrs...)
+    p = heatmap(
+        xs,
+        ys,
+        R;
+        colormap = cgrad([:white, :lightskyblue]),
+        fxaa = false,
+        axis = (; xlabel = L"x_1", ylabel = L"x_2"),
+    )
 
     save_figure(p, "s2_robust$(fname_ext).pdf")
 end
