@@ -12,25 +12,26 @@ include("analysis.jl")
 Random.seed!(3259245)
 
 # Universal plot options - for consistent publication-sized figures
-scale_factor = 2.0
+scale_factor = 2.5
 fig_width_cm = 11.0
 fig_height_cm = fig_width_cm / 1.4
+resolution = scale_factor * 72.0 / 2.54 .* (fig_width_cm, fig_height_cm)
 # 1 inch ≡ 72pt ⟺ 1 cm ≡ 72 / 2.54 pt
-set_theme!(
-    Theme(;
-        fonts = (; regular = "CM"),
-        fontsize = scale_factor * 11,
-        resolution = scale_factor * 72.0 / 2.54 .* (fig_width_cm, fig_height_cm),
-    ),
+ptheme = Theme(;
+    fonts = (; regular = "CM"),
+    fontsize = scale_factor * 15,
+    # ,
+    Axis = (; width = resolution[1], height = resolution[2]),
 )
+set_theme!(ptheme)
 
 # Specify the ODE and SDE solvers, as provided by DifferentialEquations.jl
 # ODE solvers: https://docs.sciml.ai/DiffEqDocs/stable/solvers/ode_solve/
 # SDE solvers: https://docs.sciml.ai/DiffEqDocs/stable/solvers/sde_solve/
 # Note that the order of each solver must be compatible with the step sizes. See the supplementary
 # materials for details.
-ode_solver = RK4()
-sde_solver = SRA1()
+ode_solver = Euler()
+sde_solver = EM()
 
 ################## Model specification ##################
 ## ROSSBY MODEL WITH σ = Iₙ
@@ -41,10 +42,10 @@ model = ex_rossby(σ_id)
 
 ################## Data generation ##################
 # If true, generate new data (takes some time). If false, attempt to load previously saved data.
-GENERATE_DATA = true
+GENERATE_DATA = false
 
 # The number of realisations to work with (must match saved if loading data)
-N = 100
+N = 10000
 
 ################## Theorem validation ##################
 # Define the initial condition and finite-time interval
@@ -55,12 +56,12 @@ rs = [1, 2, 3, 4]
 εs = [10^i for i in range(-1; stop = -4.0, step = -0.25)]
 # Corresponding step sizes. Chosen automatically using the strong order of the SDE solver, but can
 # be set manually if desired.
-println("Order of SDE solver: $(StochasticDiffEq.alg_order(sde_solver))")
-println("Order of ODE solver: $(OrdinaryDiffEq.alg_order(ode_solver))")
-γ = min(StochasticDiffEq.alg_order(sde_solver), OrdinaryDiffEq.alg_order(ode_solver))
-# γ = 1.0
-println("Step size: ε^($(2 / γ))")
-dts = [ε^(2 / γ) for ε in εs]
+# println("Order of SDE solver: $(StochasticDiffEq.alg_order(sde_solver))")
+# println("Order of ODE solver: $(OrdinaryDiffEq.alg_order(ode_solver))")
+# γ = min(StochasticDiffEq.alg_order(sde_solver), OrdinaryDiffEq.alg_order(ode_solver))
+# # γ = 2.0
+# println("Step size: ε^($(2 / γ))")
+dt = minimum(εs)^1
 
 # Naming convention for data and figure outputs.
 name = "$(model.name)_$(space_time.x₀)_[$(space_time.t₀),$(space_time.T)]_I"
@@ -73,7 +74,7 @@ gauss_z_rels = Array{Float64}(undef, length(εs), model.d, N)
 
 if GENERATE_DATA
     # Solve the SDE to generate new data
-    generate_ε_data!(y_rels, z_rels, gauss_z_rels, model, space_time, N, εs, dts)
+    generate_ε_data!(y_rels, z_rels, gauss_z_rels, model, space_time, N, εs, dt)
     save(data_fname, "y", y_rels, "z", z_rels, "gauss_z", gauss_z_rels)
 
 else
@@ -104,10 +105,12 @@ theorem_validation(
     model,
     space_time,
     εs,
-    dts,
-    rs;
+    dt,
+    rs,
+    ptheme;
     ode_solver = ode_solver,
-    legend_idx = 5,
+    legend_idx = 2,
+    hist_idxs = [1, 2, 5, 9],
 )
 
 ################## Σ through time ##################
@@ -120,7 +123,19 @@ t₀ = 0.0
 ts = 0.1:0.1:1.0
 hist_idxs = 2:2:length(ts)
 
-for (σ, σ_label) in [(σ_id, "I")]#, ((x, _, t) -> SA[0.5+x 0.0; 0.0 1.0], "x_dir_vary")]
+# The full figure
+f = Figure()
+
+for (i, (σ, g_label1, g_label2, σ_label)) in enumerate([
+    (σ_id, L"(a) $\sigma(x,t) = I_2$", L"(c) $\sigma(x,t) = I_2$", "I"),
+    (
+        (x, _, t) -> SA[x[1] 0.5; x[1] 0.5 * x[1]+0.5 * x[2]],
+        L"(b) $\sigma(x,t) = \sigma_M(x)$",
+        L"(d) $\sigma(x,t) = \sigma_M(x)$",
+        "M",
+    ),
+])
+    model = ex_rossby(σ)
 
     # Naming convention for data and figure outputs.
     name = "$(model.name)_$(x₀)_fixed$(ε)_through[$(minimum(ts)),$(maximum(ts))]_$(σ_label)"
@@ -129,7 +144,6 @@ for (σ, σ_label) in [(σ_id, "I")]#, ((x, _, t) -> SA[0.5+x 0.0; 0.0 1.0], "x_
     # Pre-allocation of output
     time_rels = Array{Float64}(undef, length(ts), model.d, N)
 
-    GENERATE_DATA = false
     if GENERATE_DATA
         # Solve the SDE to generate new data
         generate_time_data!(time_rels, model, ε, x₀, t₀, ts, N, dt)
@@ -140,7 +154,8 @@ for (σ, σ_label) in [(σ_id, "I")]#, ((x, _, t) -> SA[0.5+x 0.0; 0.0 1.0], "x_
         time_rels .= dat["rels"]
     end
 
-    Σ_through_time(
+    Σ_through_time!(
+        f,
         time_rels,
         model,
         ε,
@@ -148,11 +163,15 @@ for (σ, σ_label) in [(σ_id, "I")]#, ((x, _, t) -> SA[0.5+x 0.0; 0.0 1.0], "x_
         t₀,
         ts,
         dt,
-        σ_label;
+        g_label1,
+        g_label2,
+        i;
         hist_idxs = hist_idxs,
         ode_solver = ode_solver,
     )
 end
+
+save_figure(f, "through_time.pdf")
 
 ################## Stochastic sensitivity calculations ##################
 # Create a grid of initial conditions

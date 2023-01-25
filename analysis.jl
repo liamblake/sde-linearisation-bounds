@@ -11,6 +11,9 @@ include("covariance.jl")
 # The color palette to use throughout
 PALETTE = :spring
 
+# The alphabet
+ALPH = 'a':'z'
+
 """
 	pnorm(A; dims=1, p=2)
 
@@ -32,7 +35,23 @@ function save_figure(p, fname; show_print = true)
     if show_print
         println("Saving figure to $(path)")
     end
+
+    # Trim any unneeded whitespace
+    resize_to_layout!(p)
+
     save(path, p; pt_per_unit = 1)
+end
+
+"""
+    normalised_hexbin!(ax, x, y; kwargs...)
+
+Plot a hexbin with normalised cell counts.
+"""
+function normalised_hexbin!(ax, x, y; kwargs...)
+    total = length(x)
+    @assert length(y) == total
+
+    hb = hexbin!(ax, x, y; scale = c -> c / total, kwargs...)
 end
 
 """
@@ -42,7 +61,7 @@ Plot the n standard-deviation regions of a bivariate Gaussian distribution
 with mean μ and covariance matrix Σ. The number of regions plotted is specified
 by nσ.
 """
-function bivariate_std_dev!(ax, μ, Σ; nσ = 1, colour = :black, label = "", kwargs...)
+function bivariate_std_dev!(ax, μ, Σ; nσ = 1, colour = :black, label = nothing, kwargs...)
     # Calculate the first two principal axes of the covariance matrix
     # These correspond to the major and minor axes of the ellipse
     evals, evecs = eigen(Σ)
@@ -63,11 +82,11 @@ function bivariate_std_dev!(ax, μ, Σ; nσ = 1, colour = :black, label = "", kw
         x = t -> n * (a * cos(t) * cos(θ) - b * sin(t) * sin(θ)) + μ[1]
         y = t -> n * (a * cos(t) * sin(θ) + b * sin(t) * cos(θ)) + μ[2]
 
-        lines!(ax, x.(ts), y.(ts); color = colour, label = (n == 1) ? label : "", kwargs...)
+        lines!(ax, x.(ts), y.(ts); color = colour, label = (n == 1) ? label : nothing, kwargs...)
     end
 
     # Also plot the mean
-    scatter!(ax, [μ[1]], [μ[2]]; markersize = 3, color = colour, label = "")
+    scatter!(ax, [μ[1]], [μ[2]]; markersize = 6, color = colour, markerstrokecolor = colour)
 end
 
 """
@@ -92,19 +111,28 @@ end
 Plot a series of values y against another x, both in the base-10 logarithmic scale.
 The plot is saved to save_dir.
 """
-function plot_log_with_lobf(x, y, save_dir; annotation = s -> "", kwargs...)
+function plot_log_with_lobf!(g, x, y; annotation = s -> "", kwargs...)
     logx = log10.(x)
     logy = log10.(y)
-
-    p, ax, _ = scatter(logx, logy; color = :black, kwargs...)
 
     # Add a line of best fit
     fit, coefs = lobf(logx, logy)
     slope = round(coefs[2]; digits = 2)
+    ax = Axis(g; kwargs...)
     lines!(ax, logx, fit; color = :red)
-    # text!(annotation(slope); align = (:left, :top))
 
-    save_figure(p, save_dir)
+    # Plot the points about the LOBF
+    scatter!(ax, logx, logy; color = :black)
+
+    # Determine the position of the text. Assuming the line is decreasing, take the second smallest
+    # x-value and the second largest y-value. Seems to work well.
+    t_pos_x = logx[partialsortperm(logx, 1:2)[2]]
+    t_pos_y = logy[partialsortperm(logy, 1:2; rev = true)[2]]
+
+    text!(t_pos_x, t_pos_y; text = annotation(slope))
+    hidedecorations!(ax; label = false, ticklabels = false, ticks = false)
+
+    return ax
 end
 
 """
@@ -114,15 +142,17 @@ function theorem_validation(
     y_rels,
     z_rels,
     gauss_z_rels,
-    # gauss_y_rels,
     model,
     space_time,
     εs,
-    dts,
-    rs;
+    dt,
+    rs,
+    ptheme;
     ode_solver = Euler(),
     legend_idx = 1,
     plot_attrs = Dict(),
+    hist_idxs = 1:length(εs),
+    hist_ncols = 2,
 )
     @unpack x₀, t₀, T = space_time
     name = "$(model.name)_$(x₀)_[$(t₀),$(T)]"
@@ -138,16 +168,16 @@ function theorem_validation(
     y_means = Array{Float64}(undef, nε, model.d)
     sample_S2s = Vector{Float64}(undef, nε)
 
-    # Only plot histograms if working in 2D
-    plot_histograms = (model.d == 2) && false
-    S2 = 1.0
+    # Calculate the deviation covariance from the integral expression
+    w, Σ = Σ_calculation(model, x₀, t₀, T, dt, 0.001, ode_solver)
+    # Theoretical stochastic sensitivity - the maximum eigenvalue of Σ
+    S2 = opnorm(Matrix(Σ))
 
-    for (i, ε) in enumerate(εs)
-        # Calculate the deviation covariance from the integral expression
-        w, Σ = Σ_calculation(model, x₀, t₀, T, dts[i], 0.001, ode_solver)
-        # Theoretical stochastic sensitivity - the maximum eigenvalue of Σ
-        S2 = opnorm(Matrix(Σ))
+    # Big histogram plot
+    f_hist = Figure()
+    n_histed = 1
 
+    all_hists = for (i, ε) in enumerate(εs)
         # Diagnostics - mean should be zero
         y_means[i, :] = mean(y_rels[i, :, :] .- w; dims = 2)
         z_means[i, :] = mean(z_rels[i, :, :]; dims = 2)
@@ -169,21 +199,18 @@ function theorem_validation(
             z_abs_diff[j, i] = mean(z_diffs .^ r)
         end
 
-        if plot_histograms
+        if i in hist_idxs
+            grid = f_hist[ceil(Int64, n_histed / hist_ncols), mod1(n_histed, 2)] = GridLayout()
+
             # Plot a histogram of the realisations, with covariance bounds
-            p = Figure()
-            ax = Axis(p[2, 1]; xlabel = L"y_1", ylabel = L"y_2")
-            hb = hexbin!(
+            ax = Axis(grid[2, 1]; xlabel = L"y_1", ylabel = L"y_2")
+            hb = normalised_hexbin!(
                 ax,
                 y_rels[i, 1, :],
                 y_rels[i, 2, :];
                 bins = 100,
                 colormap = cgrad(PALETTE; rev = true),
             )
-
-            # Add the colourbar above the plot
-            # Colorbar(p[1, 1], hb; vertical = false)
-
             bivariate_std_dev!(
                 ax,
                 w,
@@ -198,47 +225,56 @@ function theorem_validation(
                 s_mean_y,
                 S_y;
                 nσ = 3,
-                colour = :red,
+                colour = :blue,
                 linestyle = :dash,
                 label = "Sample",
             )
 
+            # Add the colourbar above the plot
+            Colorbar(grid[1, 1], hb; vertical = false)
+
+            # Add the label - assuming εs are powers of 10
+            eps_pow_str = @sprintf("%.2f", log10(ε))
+            Label(
+                grid[3, 1],
+                L"(%$(ALPH[n_histed])) $\epsilon = 10^{%$(eps_pow_str)}$";
+                fontsize = ptheme.fontsize.val * 1.25,
+            )
+
+            # Add a legend if required
             if i == legend_idx
-                axislegend(ax)
+                axislegend(ax; position = :rt)
             end
 
-            save_figure(p, "$(name)/y_histogram_$(@sprintf("%.7f", ε)).pdf")
+            n_histed += 1
         end
     end
 
+    save_figure(f_hist, "$(name)/y_histogram.pdf")
+
+    f_errs = Figure()
     for (j, r) in enumerate(rs)
-        plot_log_with_lobf(
+        grid = f_errs[ceil(Int64, j / 2), mod1(j, 2)] = GridLayout()
+        ax = plot_log_with_lobf!(
+            grid[1, 1],
             εs,
-            @view(z_abs_diff[j, :]),
-            "$(name)/z_diff_$(r).pdf";
-            annotation = slope -> L"\Gamma_z^{(%$r)}(\varepsilon) \sim \varepsilon^{%$slope}",
-            axis = (;
-                xlabel = L"\log_{10}{\,\varepsilon}",
-                ylabel = L"\log_{10}{\,\Gamma_z^{(%$r)}(\varepsilon)}",
-            ),
+            @view(z_abs_diff[j, :]);
+            annotation = slope -> L"\Gamma_z^{(%$r)}(\epsilon) \sim \epsilon^{%$slope}",
+            xlabel = L"\log_{10}{\,\epsilon}",
+            ylabel = L"\log_{10}{\,\Gamma_z^{(%$r)}(\epsilon)}",
         )
+
+        Label(grid[2, 1], L"(%$(ALPH[j])) $r = %$(r)$"; fontsize = ptheme.fontsize.val * 1.25)
     end
 
-    # Plot the difference in stochastic sensitivity
-    abs_S2_diff = abs.(sample_S2s .- S2)
-    plot_log_with_lobf(
-        εs,
-        abs_S2_diff,
-        "$(name)/s2_diff.pdf";
-        annotation = slope -> L"\Gamma_{S^2}(\varepsilon) \sim \varepsilon^{%$slope}",
-        axis = (;
-            xlabel = L"\log_{10}{\,\varepsilon}",
-            ylabel = L"\log_{10}{\,\Gamma_{S^2}(\varepsilon)}",
-        ),
-    )
+    save_figure(f_errs, "$(name)/z_diff.pdf")
 end
 
-function Σ_through_time(
+"""
+
+"""
+function Σ_through_time!(
+    fig,
     rels,
     model,
     ε,
@@ -246,10 +282,11 @@ function Σ_through_time(
     t₀,
     ts,
     dt,
-    σ_label;
+    g_label1,
+    g_label2,
+    fig_col;
     hist_idxs = 1:length(ts),
     ode_solver = Euler(),
-    plot_attrs...,
 )
     T = maximum(ts)
     name = "$(model.name)_$(x₀)_[$(t₀),$(T)]"
@@ -258,13 +295,14 @@ function Σ_through_time(
     det_prob = ODEProblem(model.velocity, x₀, (t₀, T))
     det_sol = solve(det_prob, ode_solver; dt = dt, dtmax = dt)
 
-    traj_fig = Figure()
-    traj_ax = Axis(traj_fig[2, 1]; xlabel = L"x_1", ylabel = L"x_2")
-
     S²_vals = Vector{Float64}(undef, length(ts))
     sample_S²_vals = Vector{Float64}(undef, length(ts))
     ws = Vector{Vector{Float64}}(undef, length(ts))
     Σs = Vector{Matrix{Float64}}(undef, length(ts))
+
+    # Setup the trajectory through time plot
+    g_traj = fig[1, fig_col] = GridLayout()
+    traj_ax = Axis(g_traj[1, 1]; xlabel = L"x_1", ylabel = L"x_2")
 
     for (i, t) in enumerate(ts)
         w, Σ = Σ_calculation(model, x₀, t₀, t, dt, 0.001, ode_solver)
@@ -287,22 +325,19 @@ function Σ_through_time(
     # Plot the deterministic trajectory (above the histograms, below the SD bounds)
     sol_through_time_x = det_sol.(t₀:dt:T, idxs = 1)
     sol_through_time_y = det_sol.(t₀:dt:T, idxs = 2)
-    lines!(sol_through_time_x, sol_through_time_y; color = :gray, linewidth = 0.5)
+    lines!(traj_ax, sol_through_time_x, sol_through_time_y; color = :gray, linewidth = 0.5)
 
     # Plot the covariance visualisations
     for i in hist_idxs
         bivariate_std_dev!(traj_ax, ws[i], ε^2 * Σs[i]; nσ = 2, linecolor = :black, linewidth = 0.5)
     end
 
-    save_figure(traj_fig, "$(name)/time_traj_$(σ_label).pdf")
+    Label(g_traj[2, 1], g_label1; fontsize = ptheme.fontsize.val * 1.25)
 
-    p, ax, _ = scatter(
-        ts,
-        sample_S²_vals;
-        color = :black,
-        label = L"Limiting ($S^2(x,t)$)",
-        axis = (; xlabel = L"t", ylabel = "Covariance operator norm"),
-    )
+    g2 = fig[2, fig_col] = GridLayout()
+    ax = Axis(g2[1, 1]; xlabel = L"t", ylabel = "Covariance operator norm")
+
+    scatter!(g2[1, 1], ts, sample_S²_vals; color = :black, label = L"Limiting ($S^2(x,t)$)")
     scatter!(
         ax,
         ts,
@@ -315,7 +350,7 @@ function Σ_through_time(
     hidedecorations!(ax; label = false, ticklabels = false, ticks = false)
     axislegend(ax; halign = :left, valign = :top)
 
-    save_figure(p, "$(name)/time_S2_$(σ_label).pdf")
+    Label(g2[2, 1], g_label2; fontsize = ptheme.fontsize.val * 1.25)
 end
 
 """
@@ -338,45 +373,21 @@ Arguments:
 
 
 """
-function S²_grid_sets(
-    model,
-    xs,
-    ys,
-    t₀,
-    T,
-    threshold,
-    dt,
-    dx,
-    fname_ext;
-    ode_solver = Euler(),
-    plot_attrs...,
-)
+function S²_grid_sets(model, xs, ys, t₀, T, threshold, dt, dx, fname_ext; ode_solver = Euler())
     # Compute the S² value for each initial condition, as the operator norm of Σ
     S²_grid = map(collect(Base.product(xs, ys))) do pair
         opnorm(Σ_calculation(model, [pair[1], pair[2]], t₀, T, dt, dx, ode_solver)[2])
     end
 
-    f, _, p = heatmap(
-        xs,
-        ys,
-        log.(S²_grid);
-        colormap = Reverse(:winter),
-        fxaa = false,
-        axis = (; xlabel = L"x_1", ylabel = L"x_2"),
-    )
-    Colorbar(f, p)
-    save_figure(p, "s2_field$(fname_ext).pdf")
+    f = Figure()
+    ax = Axis(f[2, 1]; xlabel = L"x_1", ylabel = L"x_2")
+    hm = heatmap!(ax, xs, ys, log.(S²_grid); colormap = Reverse(:winter), fxaa = false)
+    Colorbar(f[1, 1], hm; vertical = false)
 
     # Extract robust sets and plot
     R = S²_grid .< threshold
-    p = heatmap(
-        xs,
-        ys,
-        R;
-        colormap = cgrad([:white, :lightskyblue]),
-        fxaa = false,
-        axis = (; xlabel = L"x_1", ylabel = L"x_2"),
-    )
+    ax2 = Axis(f[2, 2]; xlabel = L"x_1", ylabel = L"x_2")
+    heatmap!(ax2, xs, ys, R; colormap = cgrad([:white, :lightskyblue]), fxaa = false)
 
-    save_figure(p, "s2_robust$(fname_ext).pdf")
+    save_figure(f, "s2_field$(fname_ext).pdf")
 end

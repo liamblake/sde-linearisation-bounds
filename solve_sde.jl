@@ -41,12 +41,11 @@ function generate_ε_data!(
     y_dest,
     z_dest,
     gauss_z_dest,
-    gauss_y_dest,
     model,
     space_time,
     N,
     εs,
-    dts;
+    dt,
     ode_solver = Euler(),
     sde_solver = EM(),
 )
@@ -55,7 +54,7 @@ function generate_ε_data!(
     nε = length(εs)
 
     # Ensure destination is of the the expected size
-    @assert size(y_dest) == size(z_dest) == size(gauss_z_dest) == size(gauss_y_dest) == (nε, d, N)
+    @assert size(y_dest) == size(z_dest) == size(gauss_z_dest) == (nε, d, N)
 
     # For storing simulations - pre-allocate once and reuse
     joint_rels = Array{Float64}(undef, (2 * d, N))
@@ -63,7 +62,7 @@ function generate_ε_data!(
     # Calculate the deterministic trajectory. This is needed to form the limiting velocity field
     println("Solving for deterministic trajectory...")
     det_prob = ODEProblem(velocity, x₀, (t₀, T))
-    det_sol = solve(det_prob, ode_solver; dt = minimum(dts), dtmax = minimum(dts))
+    det_sol = solve(det_prob, ode_solver; dt = dt, dtmax = dt)
     w = last(det_sol.u)
 
     # Set up as a joint system so the same noise realisation is used.
@@ -84,8 +83,6 @@ function generate_ε_data!(
     println("Generating realisations for values of ε...")
 
     @showprogress for (i, ε) in enumerate(εs)
-        dt = dts[i]
-
         # Simulate from the y equation and the limiting equation simultaneously
         sde_realisations!(
             joint_rels,
@@ -106,7 +103,6 @@ function generate_ε_data!(
         y_dest[i, :, :] .= joint_rels[1:d, :]
         gauss_z_dest[i, :, :] .= joint_rels[(d + 1):(2 * d), :]
         z_dest[i, :, :] .= (y_dest[i, :, :] .- w) ./ ε
-        gauss_y_dest[i, :, :] .= ε * z_dest[i, :, :] .+ w
     end
 
     nothing

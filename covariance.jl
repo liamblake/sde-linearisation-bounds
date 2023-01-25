@@ -132,3 +132,22 @@ function Σ_calculation(model, x₀, t₀, T, dt, dx, ode_solver)
 
     return w, Σ
 end
+
+function Σ_calculation_ode(model, x₀, t₀, T, dt, ode_solver)
+    @unpack d, velocity, ∇u, σ = model
+
+    # Solve for the flow map and the covariance matrix as a joint system
+    function joint_F_Σ(x, _, t)
+        traj_∇u = ∇u(x[1], t)
+        traj_σ = σ(x[1], nothing, t)
+
+        du = SA[velocity(x[1], nothing, t), traj_∇u * x[2] + x[2] * traj_∇u' + traj_σ * traj_σ']
+        return du
+    end
+
+    prob = ODEProblem(joint_F_Σ, [x₀, zeros(d, d)], (t₀, T))
+    sol = solve(prob, ode_solver; dt = dt, dtmax = dt, save_everystep = false)
+
+    final = sol[2]
+    return final[1], final[2]
+end
