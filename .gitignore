@@ -24,4 +24,7 @@ data/
 output/
 
 # Mainly serves as a scratchpad for choosing appropriate initial conditions
-det_traj_visualisation.jlbenchmark.jl
+det_traj_visualisation.jl
+
+# Used in developing an efficient SDE solver scheme
+benchmark.jl
