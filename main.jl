@@ -38,7 +38,7 @@ sde_solver = EM()
 function σ_id(_, _, _)
     SA[1.0 0.0; 0.0 1.0]
 end
-model = ex_rossby(σ_id)
+model = rossby(σ_id)
 
 ################## Data generation ##################
 # If true, generate new data (takes some time). If false, attempt to load previously saved data.
@@ -107,7 +107,13 @@ theorem_validation(
     εs,
     dt,
     rs,
-    ptheme;
+    ptheme,
+    [
+        L"(a) $r = 1$ (mean)",
+        L"(b) $r = 2$ (covariance)",
+        L"(c) $r = 3$ (skewness)",
+        L"(d) $r = 4$ (kurtosis)",
+    ];
     ode_solver = ode_solver,
     legend_idx = 2,
     hist_idxs = [1, 2, 5, 9],
@@ -135,7 +141,7 @@ for (i, (σ, g_label1, g_label2, σ_label)) in enumerate([
         "M",
     ),
 ])
-    model = ex_rossby(σ)
+    model = rossby(σ)
 
     # Naming convention for data and figure outputs.
     name = "$(model.name)_$(x₀)_fixed$(ε)_through[$(minimum(ts)),$(maximum(ts))]_$(σ_label)"
@@ -175,8 +181,8 @@ save_figure(f, "through_time.pdf")
 
 ################## Stochastic sensitivity calculations ##################
 # Create a grid of initial conditions
-xs = collect(range(0; stop = π, length = 100))
-ys = collect(range(0; stop = π, length = 100))
+xs = collect(range(0; stop = π, length = 800))
+ys = collect(range(0; stop = π, length = 800))
 
 # Time interval of interest
 t₀ = 0.0
@@ -188,8 +194,4 @@ dx = 0.001
 # Pick a threshold value for extracting coherent sets
 threshold = 10.0
 
-ϵ = 0.3
-model = ex_rossby(σ_id; ϵ = ϵ)
-
-include("analysis.jl")
 S²_grid_sets(model, xs, ys, t₀, T, threshold, dt, dx, "_$(ϵ)"; ode_solver = ode_solver)

@@ -2,7 +2,6 @@ using Parameters
 using StaticArrays
 
 """
-
 Describes a toy SDE model, consisting of
     - name: a string identifying the model, for saving data and figures.
     - d: dimension of the model state variable.
@@ -26,6 +25,7 @@ end
 
 """
 Spatiotemporal information for computing a Gaussian approximation with respect to a single initial condition x₀ over the finite-time interval [t₀, T].
+
 """
 @with_kw struct SpaceTime
     x₀::SVector
@@ -53,7 +53,7 @@ The parameters are
     - ϵ: amplitude of the oscillatory perturbation.
 
 """
-function ex_rossby(σ::Function; A = 1.0, c = 0.5, K = 4.0, l₁ = 2.0, c₁ = π, k₁ = 1.0, ϵ = 0.3)
+function rossby(σ::Function; A = 1.0, c = 0.5, K = 4.0, l₁ = 2.0, c₁ = π, k₁ = 1.0, ϵ = 0.3)
     function rossby(x, _, t)
         SA[
             c - A * sin(K * x[1]) * cos(x[2]) + ϵ * l₁ * sin(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2]),
@@ -72,42 +72,22 @@ function ex_rossby(σ::Function; A = 1.0, c = 0.5, K = 4.0, l₁ = 2.0, c₁ = �
 end
 
 """
-	ex_lorenz()
+    linear_vel(A::StaticMatrix, σ::StaticMatrix)
 
-40-dimensional example: Lorenz 96 system. Currently unused
+An Ornstein-Uhlenbeck process
+    dyₜ = Ayₜdt + σdWₜ,
+where A and σ are constant d×d matrices. The analytical solution is a zero-mean Gaussian process.
+
 """
-function ex_lorenz()::Model
-    # Parameters
-    d = 4
-    F = 8
+function linear_vel(A::StaticMatrix, σ::StaticMatrix)
+    # Ensure matrix sizes are compatable
+    d = size(A)[1]
+    @assert size(A)[2] == d
+    @assert size(σ) == size(A)
 
-    # In-place velocity field
-    function lorenz!(dx, x, _, _)
+    u = (x, _, _) -> A * x
+    ∇u = (x, t) -> A
+    σf = (_, _, _) -> σ
 
-        # 3 edge cases explicitly
-        @inbounds dx[1] = (x[2] - x[d - 1]) * x[d] - x[1] + F
-        @inbounds dx[2] = (x[3] - x[d]) * x[1] - x[2] + F
-        @inbounds dx[d] = (x[1] - x[d - 2]) * x[d - 1] - x[d] + F
-        # The general case.
-        for n = 3:(d - 1)
-            @inbounds dx[n] = (x[n + 1] - x[n - 2]) * x[n - 1] - x[n] + F
-        end
-
-        nothing
-    end
-
-    # TODO: Need to test this construction.
-    # Some magic using the diagm function from the LinearAlgebra library.
-    ∇u =
-        (x, _) -> diagm(
-            1 - d => [x[d - 1]],
-            -2 => circshift(x, -1)[1:(d - 2)],
-            -1 => circshift(x, -1)[2:d] - circshift(x[2:d], 1),
-            0 => -ones(d),
-            1 => circshift(x, 1)[1:(d - 1)],
-            d - 2 => -[x[d], x[1]],
-            d - 1 => [x[2] - x[d - 1]],
-        )
-
-    return Model("lorenz", d, lorenz!, ∇u, 1.0)
+    return Model("linear2d", 2, u, ∇u, σf)
 end

@@ -129,7 +129,7 @@ function plot_log_with_lobf!(g, x, y; annotation = s -> "", kwargs...)
     t_pos_x = logx[partialsortperm(logx, 1:2)[2]]
     t_pos_y = logy[partialsortperm(logy, 1:2; rev = true)[2]]
 
-    text!(t_pos_x, t_pos_y; text = annotation(slope))
+    text!(t_pos_x, t_pos_y; text = annotation(slope), color = :red)
     hidedecorations!(ax; label = false, ticklabels = false, ticks = false)
 
     return ax
@@ -147,7 +147,8 @@ function theorem_validation(
     εs,
     dt,
     rs,
-    ptheme;
+    ptheme,
+    rlabels;
     ode_solver = Euler(),
     legend_idx = 1,
     plot_attrs = Dict(),
@@ -264,7 +265,7 @@ function theorem_validation(
             ylabel = L"\log_{10}{\,\Gamma_z^{(%$r)}(\epsilon)}",
         )
 
-        Label(grid[2, 1], L"(%$(ALPH[j])) $r = %$(r)$"; fontsize = ptheme.fontsize.val * 1.25)
+        Label(grid[2, 1], rlabels[j]; fontsize = ptheme.fontsize.val * 1.25)
     end
 
     save_figure(f_errs, "$(name)/z_diff.pdf")
