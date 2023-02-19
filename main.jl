@@ -194,4 +194,4 @@ dx = 0.001
 # Pick a threshold value for extracting coherent sets
 threshold = 10.0
 
-S²_grid_sets(model, xs, ys, t₀, T, threshold, dt, dx, "_$(ϵ)"; ode_solver = ode_solver)
+S²_grid_sets(model, xs, ys, t₀, T, threshold, dt, dx, "_0.3"; ode_solver = ode_solver)

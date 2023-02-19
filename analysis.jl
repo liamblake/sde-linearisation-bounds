@@ -86,7 +86,7 @@ function bivariate_std_dev!(ax, μ, Σ; nσ = 1, colour = :black, label = nothin
     end
 
     # Also plot the mean
-    scatter!(ax, [μ[1]], [μ[2]]; markersize = 6, color = colour, markerstrokecolor = colour)
+    scatter!(ax, [μ[1]], [μ[2]]; markersize = 9, color = colour, markerstrokecolor = colour)
 end
 
 """
@@ -335,23 +335,23 @@ function Σ_through_time!(
 
     Label(g_traj[2, 1], g_label1; fontsize = ptheme.fontsize.val * 1.25)
 
-    g2 = fig[2, fig_col] = GridLayout()
-    ax = Axis(g2[1, 1]; xlabel = L"t", ylabel = "Covariance operator norm")
+    # g2 = fig[2, fig_col] = GridLayout()
+    # ax = Axis(g2[1, 1]; xlabel = L"t", ylabel = "Covariance operator norm")
 
-    scatter!(g2[1, 1], ts, sample_S²_vals; color = :black, label = L"Limiting ($S^2(x,t)$)")
-    scatter!(
-        ax,
-        ts,
-        S²_vals;
-        color = :transparent,
-        strokewidth = 1.5,
-        strokecolor = :red,
-        label = "Sample",
-    )
-    hidedecorations!(ax; label = false, ticklabels = false, ticks = false)
-    axislegend(ax; halign = :left, valign = :top)
+    # scatter!(g2[1, 1], ts, sample_S²_vals; color = :black, label = L"Limiting ($S^2(x,t)$)")
+    # scatter!(
+    #     ax,
+    #     ts,
+    #     S²_vals;
+    #     color = :transparent,
+    #     strokewidth = 1.5,
+    #     strokecolor = :red,
+    #     label = "Sample",
+    # )
+    # hidedecorations!(ax; label = false, ticklabels = false, ticks = false)
+    # axislegend(ax; halign = :left, valign = :top)
 
-    Label(g2[2, 1], g_label2; fontsize = ptheme.fontsize.val * 1.25)
+    # Label(g2[2, 1], g_label2; fontsize = ptheme.fontsize.val * 1.25)
 end
 
 """
@@ -382,7 +382,7 @@ function S²_grid_sets(model, xs, ys, t₀, T, threshold, dt, dx, fname_ext; ode
 
     f = Figure()
     ax = Axis(f[2, 1]; xlabel = L"x_1", ylabel = L"x_2")
-    hm = heatmap!(ax, xs, ys, log.(S²_grid); colormap = Reverse(:winter), fxaa = false)
+    hm = heatmap!(ax, xs, ys, log.(S²_grid); colormap = :pink, fxaa = false)
     Colorbar(f[1, 1], hm; vertical = false)
 
     # Extract robust sets and plot
