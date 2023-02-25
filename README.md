@@ -1,7 +1,7 @@
 Julia code implementing the results of
 
 > L. Blake, J. Maclean, and S. Balasuriya, *Explicit Gaussian characterisation of model uncertainty
-in the limit of small noise*, (2023).
+in the limit of small noise*, **submitted for publication** (2023).
 
 
 ## File structure
