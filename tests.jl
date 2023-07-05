@@ -1,10 +1,6 @@
 using Test
 
-using DifferentialEquations
-using StaticArrays
-
-include("covariance.jl")
-include("models.jl")
+include("gaussian_computation.jl")
 
 @testset "star grid" begin
     x = [1.0, 2.0, 3.0]
@@ -30,25 +26,28 @@ supplementary materials for more details.
 """
 @testset "OU calculations" begin
     # Define OU process
-    A = SA[1.0 0.0; 0.0 2.3]
-    σ = SA[1.0 0.5; -0.2 1.4]
+    A = [1.0 0.0; 0.0 2.3]
+    σ = [1.0 0.5; -0.2 1.4]
     model = linear_vel(A, σ)
 
-    x = SA[1.1, -0.2]
+    x = [1.1, -0.2]
     t = 1.5
-    ode_solver = Euler()
 
     # Exact forms of terms involved
-    Fe = SA[exp(A[1, 1] * t) * x[1]; exp(A[2, 2] * t) * x[2]]
+    Fe = [exp(A[1, 1] * t) * x[1]; exp(A[2, 2] * t) * x[2]]
     ∇Fe = [exp(A[1, 1] * t) 0.0; 0.0 exp(A[2, 2] * t)]
     Σe = [
         (σ[1, 1]^2 + σ[1, 2]^2) / (2 * A[1, 1])*(exp(2 * A[1, 1] * t) - 1) (σ[1, 1] * σ[2, 1] + σ[1, 2] * σ[2, 2]) / (A[1, 1] + A[2, 2])*(exp((A[1, 1] + A[2, 2]) * t) - 1)
         (σ[1, 1] * σ[2, 1] + σ[1, 2] * σ[2, 2]) / (A[1, 1] + A[2, 2])*(exp((A[1, 1] + A[2, 2]) * t) - 1) (σ[2, 1]^2 + σ[2, 2]^2) / (2 * A[2, 2])*(exp(2 * A[2, 2] * t) - 1)
     ]
 
-    # Test full w, Σ calculation
-    w, Σ = Σ_calculation(model, x, 0, t, 0.001, 0.001, ode_solver)
+    for Σ₀ in [zeros(2, 2), [1.2, 0.5; 0.5, 2.1]]
+        # Test full w, Σ calculation
+        ws, Σs = gaussian_computation(model, x, 0, t, 0.001, 0.001, Euler())
 
-    @test isapprox(w, Fe, atol = 1e-0)
-    @test isapprox(Σ, Σe, atol = 1e-0)
+        @test ws[1] == x
+        @test Σs[1] == Σ₀
+        @test isapprox(ws[end], Fe, atol = 1e-0)
+        @test isapprox(Σ[end], Σ₀ + Σe, atol = 1e-0)
+    end
 end

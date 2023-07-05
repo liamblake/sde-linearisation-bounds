@@ -9,7 +9,7 @@ The Julia files in the root directory serve the following purposes:
 
 - `analysis.jl`: Validation of the main results, including generation and saving of plots.
 
-- `covariance.jl`: Computation of the limiting covariance matrix $\Sigma(x,t)$, with options to use either the direct integral expression or matrix ODE.
+- `gaussian_computation.jl`: Computation of the state and limiting covariance matrix $\Sigma(x,t)$, by directly evaluating the integral expression.
 
 - `main.jl`: The main setup and call to validation functions. Run everything in this file to generate all the figures.
 
