@@ -20,11 +20,11 @@ end
     @test isapprox(∇F(star, 2, δx), expected, atol = 1e-10)
 end
 
-"""
-Tests the calculation of Σ with an OU process, for which Σ can be computed exactly. See the
-supplementary materials for more details.
-"""
 @testset "OU calculations" begin
+    """
+    Tests the calculation of Σ with an OU process, for which Σ can be computed exactly. See the
+    supplementary materials for more details.
+    """
     # Define OU process
     A = [1.0 0.0; 0.0 2.3]
     σ = [1.0 0.5; -0.2 1.4]
@@ -41,13 +41,17 @@ supplementary materials for more details.
         (σ[1, 1] * σ[2, 1] + σ[1, 2] * σ[2, 2]) / (A[1, 1] + A[2, 2])*(exp((A[1, 1] + A[2, 2]) * t) - 1) (σ[2, 1]^2 + σ[2, 2]^2) / (2 * A[2, 2])*(exp(2 * A[2, 2] * t) - 1)
     ]
 
-    for Σ₀ in [zeros(2, 2), [1.2, 0.5; 0.5, 2.1]]
+    ts = 0:0.001:t
+    ws = Vector{Vector{Float64}}(undef, length(ts))
+    Σs = Vector{Matrix{Float64}}(undef, length(ts))
+
+    for Σ₀ in [zeros(2, 2), [1.2 0.5; 0.5 2.1]]
         # Test full w, Σ calculation
-        ws, Σs = gaussian_computation(model, x, 0, t, 0.001, 0.001, Euler())
+        gaussian_computation!(ws, Σs, model, x, Σ₀, ts)
 
         @test ws[1] == x
         @test Σs[1] == Σ₀
-        @test isapprox(ws[end], Fe, atol = 1e-0)
-        @test isapprox(Σ[end], Σ₀ + Σe, atol = 1e-0)
+        @test isapprox(ws[end], Fe, atol = 1e-2)
+        @test isapprox(Σs[end], ∇Fe * Σ₀ * ∇Fe' + Σe, atol = 1e-2)
     end
 end

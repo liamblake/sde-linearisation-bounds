@@ -1,40 +1,46 @@
-using Parameters
-using StaticArrays
+"""
+Information describing an SDE model of the form
+    dxₜ = u(xₜ, t)dt + σ(xₜ, t)dWₜ,
+stored as
+    n: The dimension of the state variable xₜ.
+    m: The dimension of the Wiener process Wₜ.
+    u!: A function with signature u!(dest, x, t), which evaluates the drift function at state x and
+        time t and stores the resulting vector in dest.
+    ∇u!: A function with signature ∇u!(dest, x, t), which evaluates the spatial Jacobian of the
+         drift function u at state x and time t and evaluates the resulting matrix in dest.
+    σ!: A function with signature σ!(dest, x, t), which evaluates the diffusion matrix σ at state x
+        and time t and evaluates the resulting matrix in dest.
+    σσᵀ!: A function with signature σσᵀ!(dest, x, t), which evaluates the product σσᵀ at state x and
+          time t and evaluates the resulting matrix in dest. Specification of this in-place allows
+          for more efficient solving of the state-covariance equations.
 
 """
-Describes a toy SDE model, consisting of
-    - name: a string identifying the model, for saving data and figures.
-    - d: dimension of the model state variable.
-    - velocity: a function with the signature velocity(x, _, t), returning the velocity field at a
-      point x and time t as an SVector. The second argument is unused, but necessary to be
-      consistent with that expected by the DifferentialEquations.jl interface.
-    - ∇u: a function with the signature ∇u(x, t), returning the velocity gradient at a point x and
-      time t, as an SMatrix.
-    - σ: a function with the signature σ(x, _, t), returning the diffusion matrix of the SDE at a
-      point x and time t, as an SMatrix. The second argument is unused, but necessary to be
-      consistent with that expected by the DifferentialEquations.jl interface.
-
-"""
-@with_kw struct Model
-    name::String
-    d::Int64
-    velocity::Function
-    ∇u::Function
-    σ::Function
+struct SDEModel
+    n::Int
+    m::Int
+    # In-place version of u
+    u!::Function
+    # In-place version of ∇u
+    ∇u!::Function
+    # In-place calculation of σ
+    σ!::Function
+    # In-place calculation of σσᵀ
+    σσᵀ!::Function
 end
 
 """
-Spatiotemporal information for computing a Gaussian approximation with respect to a single initial condition x₀ over the finite-time interval [t₀, T].
+    fill_Id!(s)
 
+Fill a generic Matrix s as the identity in place, using the diagind function provided by
+LinearAlgebra.
 """
-@with_kw struct SpaceTime
-    x₀::SVector
-    t₀::Float64
-    T::Float64
+function fill_Id!(s::AbstractMatrix)
+    s .= 0.0
+    s[diagind(s)] .= 1.0
 end
 
 """
-	ex_rossby(σ::Function; A = 1.0, c = 0.5, K = 4.0, l₁ = 2.0, c₁ = π, k₁ = 1.0, ϵ = 0.3)
+	ex_rossby(; A = 1.0, c = 0.5, K = 4.0, l₁ = 2.0, c₁ = π, k₁ = 1.0, ϵ = 0.3)
 
 A kinematic travelling wave in a co-moving frame, with oscillatory determinsitic perturbations.
 Taken directly from Chapter 5 of
@@ -53,20 +59,39 @@ The parameters are
     - ϵ: amplitude of the oscillatory perturbation.
 
 """
-function rossby(σ::Function; A = 1.0, c = 0.5, K = 4.0, l₁ = 2.0, c₁ = π, k₁ = 1.0, ϵ = 0.3)
-    function rossby(x, _, t)
-        SA[
-            c - A * sin(K * x[1]) * cos(x[2]) + ϵ * l₁ * sin(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2]),
-            A * K * cos(K * x[1]) * sin(x[2]) + ϵ * k₁ * cos(k₁ * (x[1] - c₁ * t)) * sin(l₁ * x[2]),
-        ]
-    end
-
-    # The velocity gradient matrix is known exactly
-    ∇u =
-        (x, t) -> SA[
-            -A * K * cos(K * x[1]) * cos(x[2])+ϵ * k₁ * l₁ * cos(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2]) A * sin(K * x[1]) * sin(x[2])-ϵ * l₁^2 * sin(k₁ * (x[1] - c₁ * t)) * sin(l₁ * x[2])
-            -A * K^2 * sin(K * x[1]) * sin(x[2])-ϵ * k₁^2 * sin(k₁ * (x[1] - c₁ * t)) * sin(l₁ * x[2]) A * K * cos(K * x[1]) * cos(x[2])+ϵ * k₁ * l₁ * cos(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2])
-        ]
+function rossby_Id(; A = 1.0, c = 0.5, K = 4.0, l₁ = 2.0, c₁ = π, k₁ = 1.0, ϵ = 0.3)
+    return SDEModel(
+        2,
+        2,
+        function (s, x, t)
+            s[1] =
+                c - A * sin(K * x[1]) * cos(x[2]) +
+                ϵ * l₁ * sin(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2])
+            s[2] =
+                A * K * cos(K * x[1]) * sin(x[2]) +
+                ϵ * k₁ * cos(k₁ * (x[1] - c₁ * t)) * sin(l₁ * x[2])
+        end,
+        function (s, x, t)
+            s[1, 1] =
+                -A * K * cos(K * x[1]) * cos(x[2]) +
+                ϵ * k₁ * l₁ * cos(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2])
+            s[1, 2] =
+                A * sin(K * x[1]) * sin(x[2]) -
+                ϵ * l₁^2 * sin(k₁ * (x[1] - c₁ * t)) * sin(l₁ * x[2])
+            s[2, 1] =
+                -A * K^2 * sin(K * x[1]) * sin(x[2]) -
+                ϵ * k₁^2 * sin(k₁ * (x[1] - c₁ * t)) * sin(l₁ * x[2])
+            s[2, 2] =
+                A * K * cos(K * x[1]) * cos(x[2]) +
+                ϵ * k₁ * l₁ * cos(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2])
+        end,
+        function (s, _, _)
+            fill_Id!(s)
+        end,
+        function (s, _, _)
+            fill_Id!(s)
+        end,
+    )
 
     return Model("rossby", 2, rossby, ∇u, σ)
 end
@@ -79,15 +104,25 @@ An Ornstein-Uhlenbeck process
 where A and σ are constant d×d matrices. The analytical solution is a zero-mean Gaussian process.
 
 """
-function linear_vel(A::StaticMatrix, σ::StaticMatrix)
+function linear_vel(A, σ)
     # Ensure matrix sizes are compatable
-    d = size(A)[1]
-    @assert size(A)[2] == d
-    @assert size(σ) == size(A)
+    @assert issquare(A)
+    @assert size(σ, 1) == size(A, 1)
 
-    u = (x, _, _) -> A * x
-    ∇u = (x, t) -> A
-    σf = (_, _, _) -> σ
-
-    return Model("linear2d", 2, u, ∇u, σf)
+    return SDEModel(
+        size(A, 1),
+        size(σ, 1),
+        function (s, x, _)
+            mul!(s, A, x)
+        end,
+        function (s, _, _)
+            s .= A
+        end,
+        function (s, _, _)
+            s .= σ
+        end,
+        function (s, _, _)
+            mul!(s, σ, σ')
+        end,
+    )
 end
