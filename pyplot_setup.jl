@@ -1,11 +1,13 @@
 using ColorSchemes
 using PyPlot
 
-ENV["PYTHON"] = "/usr/bin/python3"
-
 # Register colormaps
 # Thermal
-register_cmap(:thermal, ColorMap(ColorSchemes.thermal.colors))
+PyPlot.matplotlib.colormaps.register(
+    ColorMap(ColorSchemes.thermal.colors);
+    name = "thermal",
+    force = true,
+)
 
 # Set universal default parameters to enforce consistent plot style
 rcParams = PyPlot.PyDict(PyPlot.matplotlib."rcParams")
@@ -19,5 +21,3 @@ rcParams["image.cmap"] = "thermal"
 # rcParams["legend.facecolor"] = "white"
 rcParams["legend.fancybox"] = false
 rcParams["legend.framealpha"] = 1.0
-
-save_dpi = 600
