@@ -51,6 +51,8 @@ function main(; regenerate = true)
         10,
         j -> j > 10 && j < 24 && j % 2 == 0,
         [1, 8, 16, 26];
+        linear = false,
+        multiplicative = false,
         regenerate = regenerate,
         msize = 12.5,
         lwidth = 1.0,

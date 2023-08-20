@@ -24,7 +24,47 @@ save_dpi = 600
 # The default PyPlot cycle of colours
 pyplot_colors = rcParams["axes.prop_cycle"].by_key()["color"]
 
+"""
+    generate_joint_sde_samples!(y_dest, l_dest, N, T, εs, ρs, u, ∇u, σ, F!, x₀, init_dist)
+
+Generate N joint realisations of a 1D SDE and a corresponding linearisation, for a range of noise
+scales and an scaled uncertain initial condition. The realisations at time T are stored in y_dest
+and l_dest. Each combination of noise scale and initial uncertainty is iterated over.
+
+Arguments:
+    - y_dest: Array to store the realisations of the original SDE.
+    - l_dest: Array to store the realisations of the corresponding linearisation.
+    - N: Number of realisations to generate.
+    - T: Final time to simulate realisations to.
+    - εs: Vector of noise scales ε.
+    - ρs: Vector of initial uncertainties ρ.
+    - u: Function defining the drift of the SDE, with signature u(x,t).
+    - ∇u: Function defining the spatial gradient of the drift of the SDE, with signature ∇u(x,t).
+    - σ: Function defining the diffusion of the SDE, with signature σ(x,t).
+    - F!: The solution to the deterministic system corresponding to the original SDE, evaluated
+          in-place at time t, with signature F!(dest, t).
+    - x₀: The fixed initial condition of the deterministic trajectory around which the SDE is
+          linearised.
+    - init_dist: Function defining the distribution of the initial condition of the linearisation,
+                 with signature init_dist(ρ), where ρ scales the initial uncertainty.
+"""
 function generate_joint_sde_samples!(y_dest, l_dest, N, T, εs, ρs, u, ∇u, σ, F!, x₀, init_dist)
+    # Ensure that destinations have the correct size
+    if size(y_dest) != (N, length(ρs), length(εs))
+        throw(
+            DimensionMismatch(
+                "y_dest must have size ($N, $(length(ρs)), $(length(εs))), but got $(size(y_dest)).",
+            ),
+        )
+    end
+    if size(l_dest) != (N, length(ρs), length(εs))
+        throw(
+            DimensionMismatch(
+                "l_dest must have size (N, $(length(ρs)), $(length(εs))), but got $(size(l_dest)).",
+            ),
+        )
+    end
+
     # Set up joint system to solve
     w = Vector{Float64}(undef, 1)
     function u_joint!(du, x, _, t)
@@ -41,10 +81,9 @@ function generate_joint_sde_samples!(y_dest, l_dest, N, T, εs, ρs, u, ∇u, σ
         # du[2, 2] = 0.0
     end
 
+    # Define the noise process separately so StochasticDiffEq knows that we are using scalar noise.
     W = WienerProcess(0.0, 0.0, 0.0)
     prob = SDEProblem(u_joint!, σ_joint!, [x₀, x₀], (0.0, T), 0.0; noise = W)
-    # prob =
-    #     SDEProblem(u_joint!, σ_joint!, [x₀, x₀], (0.0, T), 0.0; noise_rate_prototype = zeros(2, 2))
 
     # Generate samples
     p = Progress(length(ρs) * length(εs); desc = "Generating SDE samples...", showspeed = true)
@@ -75,11 +114,70 @@ function generate_joint_sde_samples!(y_dest, l_dest, N, T, εs, ρs, u, ∇u, σ
     finish!(p)
 end
 
+"""
+    bound_validation_1d(
+        name,
+        x₀,
+        init_dist,
+        t,
+        u,
+        ∇u,
+        σ,
+        F!,
+        ∇F,
+        εs,
+        δs,
+        N,
+        n_ignore,
+        line_j,
+        hist_idxs;
+        linear = false,
+        multiplicative = true,
+        regenerate = false,
+        msize = 12.5,
+        lwidth = 1.0,
+    )
+
+Generate bound validation results for a 1D example, saving figures results to output/name/.
+
+Arguments:
+    - name: Name of the example, used to save results to output/name/.
+    - x₀: The fixed initial condition of the deterministic trajectory around which the SDE is
+          linearised.
+    - init_dist: Function defining the distribution of the initial condition of the linearisation,
+                 with signature init_dist(ρ), where ρ scales the initial uncertainty.
+    - t: Final time to simulate realisations to.
+    - u: Function defining the drift of the SDE, with signature u(x,t).
+    - ∇u: Function defining the spatial gradient of the drift of the SDE, with signature ∇u(x,t).
+    - σ: Function defining the diffusion of the SDE, with signature σ(x,t).
+    - F!: The solution to the deterministic system corresponding to the original SDE, evaluated
+          in-place at time t, with signature F!(dest, t).
+    - ∇F: The spatial gradient (w.r.t. the initial condition) of the solution to the deterministic
+          system corresponding to the original SDE, with signature ∇F!(x, t).
+    - εs: Vector of noise scales ε.
+    - δs: Vector of initial uncertainties δ.
+    - N: Number of realisations to generate.
+    - n_ignore: Number of largest values of ε to ignore when fitting the LoBF.
+    - line_j: Function to determine which values of ε and δ to plot lines for, with signature
+              line_j(j). See code below.
+    - hist_idxs: Vector of indices of ε and δ to plot histograms for.
+    - linear: Whether the example has linear dynamics, that is, u is a linear function of x. This
+              informs the shape of the bound to fit to the strong error estimates.
+    - multiplicative: Whether the example has multiplicative noise, that is, σ is a linear function
+                      of x. This informs the shape of the bound to fit to the strong error
+                      estimates.
+    - regenerate: Whether to regenerate the realisations, or load them from disk. The realisations
+                  are saved to the file data/name.jld2. If reloading, the parameters must match
+                  those used to originally generate.
+    - msize: Marker size for scatter plots.
+    - lwidth: Line width for plots.
+
+"""
 function bound_validation_1d(
     name,
     x₀,
     init_dist,
-    T,
+    t,
     u,
     ∇u,
     σ,
@@ -91,6 +189,8 @@ function bound_validation_1d(
     n_ignore,
     line_j,
     hist_idxs;
+    linear = false,
+    multiplicative = true,
     regenerate = false,
     msize = 12.5,
     lwidth = 1.0,
@@ -154,24 +254,56 @@ function bound_validation_1d(
         for (j, δ) in enumerate(δs)
             # Only plot every second value of δ
             if line_j(j)
-                # Fit a LoBF of the form Γ = a₁ + a₂ ε²ʳ
-                X = hcat(ones(length(εs) - n_ignore), ε_plotting_range .^ (2 * r))
+                if !linear && !multiplicative
+                    # Fit a LoBF of the form Γ = a₁ + a₂ ε²ʳ
+                    X = hcat(ones(length(εs) - n_ignore), ε_plotting_range .^ (2 * r))
 
-                # Calculate the least-squares estimate.
-                coefs = inv(X' * X) * X' * str_errs[i, j, (n_ignore + 1):end]
+                    # Calculate the least-squares estimate.
+                    coefs = inv(X' * X) * X' * str_errs[i, j, (n_ignore + 1):end]
+
+                    ax.plot(
+                        εs_fine,
+                        @.(coefs[1] + coefs[2] * εs_fine^(2 * r));
+                        linewidth = lwidth,
+                        zorder = 1,
+                    )
+                elseif linear && multiplicative
+                    # Fit a LoBF of the form Γ =  a₂ εʳ + a₃ ε²ʳ
+                    X = hcat(ε_plotting_range .^ r, ε_plotting_range .^ (2 * r))
+
+                    # Calculate the least-squares estimate.
+                    coefs = inv(X' * X) * X' * str_errs[i, j, (n_ignore + 1):end]
+
+                    ax.plot(
+                        εs_fine,
+                        @.(coefs[1] * εs_fine^(r) + coefs[2] * εs_fine^(2 * r));
+                        linewidth = lwidth,
+                        zorder = 1,
+                    )
+                else
+                    # Fit a LoBF of the form Γ = a₁ + a₂ εʳ + a₃ ε²ʳ
+                    X = hcat(
+                        ones(length(εs) - n_ignore),
+                        ε_plotting_range .^ r,
+                        ε_plotting_range .^ (2 * r),
+                    )
+
+                    # Calculate the least-squares estimate.
+                    coefs = inv(X' * X) * X' * str_errs[i, j, (n_ignore + 1):end]
+
+                    ax.plot(
+                        εs_fine,
+                        @.(coefs[1] + coefs[2] * εs_fine^(r) + coefs[3] * εs_fine^(2 * r));
+                        linewidth = lwidth,
+                        zorder = 1,
+                    )
+                end
 
                 ax.scatter(
                     ε_plotting_range,
                     str_errs[i, j, (n_ignore + 1):end];
                     s = msize,
                     zorder = 2,
-                )
-
-                ax.plot(
-                    εs_fine,
-                    @.(coefs[1] + coefs[2] * εs_fine^(2 * r));
-                    linewidth = lwidth,
-                    zorder = 1,
                 )
 
                 # Legend entry
@@ -184,7 +316,7 @@ function bound_validation_1d(
                         marker = "o",
                         markersize = sqrt(msize),
                         linewidth = lwidth,
-                        label = L"\Gamma_{%$(Int64(r))}\!\left(\varepsilon, 10^{%$(round(log10(δs[j]); digits = 2))}\right)",
+                        label = L"E_{%$(Int64(r))}\!\left(\varepsilon, 10^{%$(round(log10(δs[j]); digits = 2))}\right)",
                     ),
                 )
                 k += 1
@@ -192,7 +324,7 @@ function bound_validation_1d(
         end
 
         ax.set_xlabel(L"\varepsilon")
-        ax.set_ylabel(L"\Gamma_{%$(Int64(r))}\!\left(\varepsilon, \rho\right)")
+        ax.set_ylabel(L"E_{%$(Int64(r))}\!\left(\varepsilon, \rho\right)")
 
         ax.legend(; handles = handlers, loc = "center left", bbox_to_anchor = (1, 0.5))
 
@@ -213,17 +345,45 @@ function bound_validation_1d(
         for (j, ε) in enumerate(εs)
             # Only plot every second value of ε
             if line_j(j)
-                # Fit a LoBF of the form Γ = a₁ + a₂ δ²ʳ
-                X = hcat(ones(length(δs) - n_ignore), δ_plotting_range .^ (2 * r))
-
                 # Calculate the least-squares estimate.
-                coefs = inv(X' * X) * X' * str_errs[i, (n_ignore + 1):end, j]
-                ax.plot(
-                    δs_fine,
-                    @.(coefs[1] + coefs[2] * δs_fine^(2 * r));
-                    linewidth = lwidth,
-                    zorder = 1,
-                )
+                if !linear && !multiplicative
+                    # Fit a LoBF of the form Γ = a₁ + a₂ δ²ʳ
+                    X = hcat(ones(length(δs) - n_ignore), δ_plotting_range .^ (2 * r))
+
+                    coefs = inv(X' * X) * X' * str_errs[i, (n_ignore + 1):end, j]
+                    ax.plot(
+                        δs_fine,
+                        @.(coefs[1] + coefs[2] * δs_fine^(2 * r));
+                        linewidth = lwidth,
+                        zorder = 1,
+                    )
+                elseif linear && multiplicative
+                    # Fit a LoBF of the form Γ = a₁ + a₂ δʳ
+                    X = hcat(ones(length(δs) - n_ignore), δ_plotting_range .^ r)
+
+                    coefs = inv(X' * X) * X' * str_errs[i, (n_ignore + 1):end, j]
+                    ax.plot(
+                        δs_fine,
+                        @.(coefs[1] + coefs[2] * δs_fine^(r));
+                        linewidth = lwidth,
+                        zorder = 1,
+                    )
+                else
+                    # Fit a LoBF of the form Γ = a₁ + a₂ δʳ + a₃ δ²ʳ
+                    X = hcat(
+                        ones(length(δs) - n_ignore),
+                        δ_plotting_range .^ r,
+                        δ_plotting_range .^ (2 * r),
+                    )
+
+                    coefs = inv(X' * X) * X' * str_errs[i, (n_ignore + 1):end, j]
+                    ax.plot(
+                        δs_fine,
+                        @.(coefs[1] + coefs[2] * δs_fine^(r) + coefs[3] * δs_fine^(2 * r));
+                        linewidth = lwidth,
+                        zorder = 1,
+                    )
+                end
 
                 ax.scatter(
                     δ_plotting_range,
@@ -232,7 +392,7 @@ function bound_validation_1d(
                     zorder = 2,
                 )
 
-                # Legend entry
+                # Manual legend entry
                 push!(
                     handlers,
                     PyPlot.matplotlib.lines.Line2D(
@@ -242,7 +402,7 @@ function bound_validation_1d(
                         marker = "o",
                         markersize = sqrt(msize),
                         linewidth = lwidth,
-                        label = L"\Gamma_{%$(Int64(r))}\!\left(10^{%$(round(log10(εs[j]); digits = 2))}, \rho\right)",
+                        label = L"E_{%$(Int64(r))}\!\left(10^{%$(round(log10(εs[j]); digits = 2))}, \rho\right)",
                     ),
                 )
                 k += 1
@@ -250,7 +410,7 @@ function bound_validation_1d(
         end
 
         ax.set_xlabel(L"\rho")
-        ax.set_ylabel(L"\Gamma_{%$(Int64(r))}\!\left(\varepsilon, \rho\right)")
+        ax.set_ylabel(L"E_{%$(Int64(r))}\!\left(\varepsilon, \rho\right)")
         ax.legend(; handles = handlers, loc = "center left", bbox_to_anchor = (1, 0.5))
 
         ax.set_xscale("log")
@@ -270,7 +430,7 @@ function bound_validation_1d(
     fig, axs = subplots(4, 4)
     for (i, δ_idx) in enumerate(hist_idxs)
         # y-label
-        axs[i, 1].yaxis.set_label_text(L"\rho = 10^{%$(Int64(floor(log10(δs[δ_idx]))))}")
+        axs[i, 1].yaxis.set_label_text(L"\rho = 10^{%$(round(log10(δs[δ_idx]); digits = 2))}")
         for (j, ε_idx) in enumerate(hist_idxs)
             axs[i, j].hist(
                 y_rels[:, δ_idx, ε_idx];
