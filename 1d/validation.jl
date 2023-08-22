@@ -177,7 +177,7 @@ function bound_validation_1d(
     name,
     x₀,
     init_dist,
-    t,
+    T,
     u,
     ∇u,
     σ,
@@ -312,7 +312,7 @@ function bound_validation_1d(
                     PyPlot.matplotlib.lines.Line2D(
                         [],
                         [];
-                        color = pyplot_colors[k % length(pyplot_colors)],
+                        color = pyplot_colors[mod1(k, length(pyplot_colors))],
                         marker = "o",
                         markersize = sqrt(msize),
                         linewidth = lwidth,
@@ -398,7 +398,7 @@ function bound_validation_1d(
                     PyPlot.matplotlib.lines.Line2D(
                         [],
                         [];
-                        color = pyplot_colors[k % length(pyplot_colors)],
+                        color = pyplot_colors[mod1(k, length(pyplot_colors))],
                         marker = "o",
                         markersize = sqrt(msize),
                         linewidth = lwidth,

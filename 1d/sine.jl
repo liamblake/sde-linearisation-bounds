@@ -1,3 +1,5 @@
+using Random
+
 using Distributions
 
 include("validation.jl")

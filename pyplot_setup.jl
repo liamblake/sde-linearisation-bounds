@@ -15,7 +15,7 @@ rcParams["text.usetex"] = true
 rcParams["font.family"] = "serif"
 rcParams["font.size"] = "14"
 
-rcParams["image.cmap"] = "thermal"
+# rcParams["image.cmap"] = "thermal"
 
 # Legend
 # rcParams["legend.facecolor"] = "white"
