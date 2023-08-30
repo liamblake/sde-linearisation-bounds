@@ -329,6 +329,8 @@ function bound_validation_1d(
         ax.legend(; handles = handlers, loc = "center left", bbox_to_anchor = (1, 0.5))
 
         ax.set_xscale("log")
+        fig.savefig("output/$name/str_err_eps_r_$(r).pdf"; bbox_inches = "tight", dpi = save_dpi)
+
         ax.set_yscale("log")
         fig.savefig(
             "output/$name/str_err_eps_r_$(r)_log.pdf";
@@ -436,8 +438,8 @@ function bound_validation_1d(
                 y_rels[:, δ_idx, ε_idx];
                 bins = 75,
                 density = true,
-                color = "gray",
-                edgecolor = "gray",
+                color = (120.0 / 255.0, 115.0 / 255.0, 175.0 / 255.0),
+                edgecolor = (120.0 / 255.0, 115.0 / 255.0, 175.0 / 255.0),
             )
 
             # Plot the linearised solution
@@ -445,7 +447,7 @@ function bound_validation_1d(
             axs[i, j].plot(
                 xrange,
                 pdf.(linear_dist(δs[δ_idx], εs[ε_idx]), xrange),
-                "r--";
+                "k-";
                 linewidth = 1.0,
             )
 
