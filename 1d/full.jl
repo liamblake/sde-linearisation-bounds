@@ -1,0 +1,62 @@
+using Distributions
+
+include("validation.jl")
+
+function main(; regenerate = true)
+    Random.seed!(3259245)
+
+    # The initial condition - a Gaussian centered around 2.0 with variance scaling by δ
+    x₀ = 0.5
+    init_dist = δ -> Normal(x₀, δ)
+
+    # Time span
+    T = 1.5
+
+    # Model definition
+    function u(x, _)
+        return sin(x)
+    end
+
+    function ∇u(x, _)
+        return cos(x)
+    end
+
+    function σ(x, _)
+        return cos(x)
+    end
+
+    # Flow map and linearisation details
+    tan_μ₀ = tan(x₀ / 2)
+    function F!(s, t)
+        s[1] = 2 * atan(exp(t) * tan_μ₀)
+    end
+
+    function ∇F(t)
+        exp(t) * sec(x₀ / 2)^2 / (exp(2 * t) * tan_μ₀^2 + 1)
+    end
+
+    bound_validation_1d(
+        "full",
+        x₀,
+        init_dist,
+        T,
+        u,
+        ∇u,
+        σ,
+        F!,
+        ∇F,
+        [10^(-i) for i in 0.0:0.1:3.0],
+        [10^(-i) for i in 0.0:0.1:3.0],
+        10000,
+        15,
+        j -> j in [1, 5, 9, 13, 17, 21],
+        [1, 6, 10, 26];
+        linear = false,
+        multiplicative = true,
+        regenerate = regenerate,
+        msize = 12.5,
+        lwidth = 1.0,
+    )
+end
+
+main(; regenerate = true)
