@@ -70,6 +70,7 @@ function generate_joint_sde_samples!(
     end
     det_prob = ODEProblem(sciml_u!, x₀, (0.0, T))
     det_sol = solve(det_prob, Euler(); dt = dt, saveat = dt)
+    F = det_sol.u[end]
 
     # Set up joint SDE problem
     # State is
@@ -86,7 +87,8 @@ function generate_joint_sde_samples!(
         u!(@view(s[1:d_y]), x[1:d_y], t)
 
         # Linearised drift
-        s[(d_y + 1):(2 * d_y)] = tmp_vec + tmp_mat * (x[1:d_y] - det_sol(t))
+        u!(@view(s[(d_y + 1):(2 * d_y)]), det_sol(t), t)
+        s[(d_y + 1):(2 * d_y)] += tmp_mat * (x[(d_y + 1):(2 * d_y)] - det_sol(t))
     end
 
     function σ_joint!(s, x, ε, t)
@@ -97,7 +99,10 @@ function generate_joint_sde_samples!(
 
         # Linearised diffusion
         σ!(@view(s[(d_y + 1):(2 * d_y), :]), det_sol(t), t)
-
+        # println(s)
+        # println(det_sol(t))
+        # i > 1 && sqrt(-1)
+        # i += 1
         rmul!(s, ε)
     end
 
@@ -117,8 +122,9 @@ function generate_joint_sde_samples!(
         ens = EnsembleProblem(sde_prob)
         sol = solve(
             ens,
-            RKMilGeneral(),
-            EnsembleThreads();
+            EM(),
+            EnsembleSerial();
+            # EnsembleThreads();
             trajectories = N,
             save_everystep = false,
             saveat = [T],
@@ -131,6 +137,8 @@ function generate_joint_sde_samples!(
         next!(p)
     end
     finish!(p)
+
+    return F
 end
 
 function bound_validation_2d(
@@ -151,18 +159,33 @@ function bound_validation_2d(
     # Pre-allocate storage of generated values
     y_rels = Array{Float64}(undef, d_y, N, length(εs))
     l_rels = Array{Float64}(undef, d_y, N, length(εs))
+    F = Vector{Float64}(undef, d_y)
 
     if regenerate
-        generate_joint_sde_samples!(y_rels, l_rels, N, d_y, d_W, T, εs, u!, σ!, ∇u!, x₀; dt = dt)
+        F .= generate_joint_sde_samples!(
+            y_rels,
+            l_rels,
+            N,
+            d_y,
+            d_W,
+            T,
+            εs,
+            u!,
+            σ!,
+            ∇u!,
+            x₀;
+            dt = dt,
+        )
 
         # Save the realisatons
-        save("data/$(name)_rels.jld2", "y_rels", y_rels, "l_rels", l_rels)
+        save("data/$(name)_rels.jld2", "y_rels", y_rels, "l_rels", l_rels, "F", F)
 
     else
         # Reload previously saved data
         dat = load("data/$(name)_rels.jld2")
         y_rels .= dat["y_rels"]
         l_rels .= dat["l_rels"]
+        F .= dat["F"]
     end
 
     # Compute the linearised mean and covariance. This can be computed independently of ε.
@@ -172,7 +195,6 @@ function bound_validation_2d(
     gaussian_computation!(ws, Σs, d_y, u!, ∇u!, σσᵀ!, x₀, zeros(d_y, d_y), ts)
 
     Σ = Σs[end]
-    w = ws[end]
 
     # Plot histograms for each value of ε
     for (i, ε) in enumerate(εs)
@@ -187,11 +209,11 @@ function bound_validation_2d(
         θ = atand(evecs[2, 2], evecs[1, 2])
         ell_w = sqrt(vals[2])
         ell_h = sqrt(vals[1])
-        ax_hist.scatter(w[1], w[2]; s = 2.5, c = :black, zorder = 2)
+        ax_hist.scatter(F[1], F[2]; s = 2.5, c = :black, zorder = 2)
         for l in [1, 2, 3]
             ax_hist.add_artist(
                 PyPlot.matplotlib.patches.Ellipse(;
-                    xy = w,
+                    xy = F,
                     width = ε * 2 * l * ell_w,
                     height = ε * 2 * l * ell_h,
                     angle = θ,
@@ -249,49 +271,6 @@ function bound_validation_2d(
         # Colorbar
         colorbar(hm; ax = ax_hist, location = "top", aspect = 40)
 
-        # x_grid =
-        #     minimum(y_rels[1, :, i]):(minimum(diff(y_rels[1, :, i])) / 10.0):maximum(
-        #         y_rels[1, :, i],
-        #     )
-        # y_grid =
-        #     minimum(y_rels[2, :, i]):(minimum(diff(y_rels[2, :, i])) / 10.0):maximum(
-        #         y_rels[2, :, i],
-        #     )
-
-        # # First marginal
-        # ax1 = fig.add_subplot(3, 2, 1; sharex = ax_hist)
-        # ax1.hist(
-        #     y_rels[1, :, i];
-        #     density = true,
-        #     bins = length(xedges),
-        #     color = "gray",
-        #     edgecolor = "gray",
-        # )
-
-        # # Gaussian density
-        # ax1.plot(x_grid, pdf.(Normal(w[1], sqrt(Σ[1, 1])), x_grid), "r--")
-
-        # ax1.xaxis.set_tick_params(; labelbottom = false)
-        # ax1.set_axis_off()
-
-        # # Second marginal
-        # ax2 = fig.add_subplot(3, 2, 4; sharey = ax_hist)
-        # ax2.hist(
-        #     y_rels[2, :, i];
-        #     density = true,
-        #     bins = length(yedges),
-        #     orientation = "horizontal",
-        #     color = "gray",
-        #     edgecolor = "gray",
-        # )
-
-        # # Gaussian density
-        # ax2.plot(y_grid, pdf.(Normal(w[2], sqrt(Σ[2, 2])), y_grid), "r--")
-
-        # ax2.yaxis.set_tick_params(; labelleft = false)
-        # ax2.set_axis_off()
-
-        # fig.subplots_adjust(; wspace = 0, hspace = 0)
         fig.savefig("output/$name/hist_$ε.pdf"; bbox_inches = "tight", dpi = save_dpi)
         close(fig)
     end
@@ -300,11 +279,10 @@ function bound_validation_2d(
     # Compute first 4 moments of strong error
     rs = 1.0:4.0
     str_errs = Array{Float64}(undef, length(rs), length(εs))
+    # l_rels = y_rels + permutedims(repeat(εs .^ 2; inner = (1, N, d_y)), (3, 2, 1))
     for (i, r) in enumerate(rs)
         str_errs[i, :] = mean(pnorm(y_rels - l_rels; dims = 1) .^ r; dims = 2)
-    end
 
-    for (i, r) in enumerate(rs)
         # ε plots
         fig, ax = subplots()
         ax.set_xlabel(L"\varepsilon")
@@ -316,8 +294,8 @@ function bound_validation_2d(
 
         coefs = inv(X' * X) * X' * log10.(str_errs[i, :])
 
+        ax.plot(εs, @.(10.0^(coefs[1]) * εs^coefs[2]), "r-")
         ax.scatter(εs, str_errs[i, :]; s = 2.5, c = :black, zorder = 2)
-        ax.plot(εs, @.(10^(coefs[1] + coefs[2] * log10.(εs))), "r-")
 
         # Annotate with the slope
         ax.text(
