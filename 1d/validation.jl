@@ -8,16 +8,6 @@ using FileIO
 using ProgressMeter
 using PyPlot
 
-# The underlying shell in which PyCall is running Python does not source .zshenv, and therefore the
-# PATH is not updated to include the directory with latex.
-# TODO: Actually fix the problem.
-using PyCall
-py"""
-from os import environ
-environ["PATH"] = f'/Users/a1742080/bin:{environ["PATH"]}'
-# environ["PATH"] = f'/Users/liam/bin:{environ["PATH"]}'
-"""
-
 include("../pyplot_setup.jl")
 save_dpi = 600
 
