@@ -82,13 +82,6 @@ parula_cmap = ColorMap(
 )
 PyPlot.matplotlib.colormaps.register(parula_cmap; name = "parula", force = true)
 
-# Binary colourscheme for sets
-PyPlot.matplotlib.colormaps.register(
-    ColorMap("twocolor", [RGBA(1.0, 1.0, 1.0, 1.0), RGBA(0.0, 0.0, 0.0, 0.0)]);
-    name = "twocolor",
-    force = true,
-)
-
 # Set universal default parameters to enforce consistent plot style
 rcParams = PyPlot.PyDict(PyPlot.matplotlib."rcParams")
 rcParams["text.usetex"] = true
@@ -101,3 +94,24 @@ rcParams["image.cmap"] = "Purples"
 # rcParams["legend.facecolor"] = "white"
 rcParams["legend.fancybox"] = false
 rcParams["legend.framealpha"] = 1.0
+
+# Binary colourscheme for sets
+PyPlot.matplotlib.colormaps.register(
+    ColorMap("twocolor", [RGBA(1.0, 1.0, 1.0, 0.0), RGBA(0.0, 0.0, 0.0, 1.0)]);
+    name = "twocolor",
+    force = true,
+)
+PyPlot.matplotlib.colormaps.register(
+    ColorMap(
+        "twocolor_blue",
+        [RGBA(1.0, 1.0, 1.0, 0.0), RGBA(102.0 / 255.0, 224.0 / 255.0, 255.0 / 255.0, 0.7)],
+    );
+    name = "twocolor_blue",
+    force = true,
+)
+
+PyPlot.matplotlib.colormaps.register(
+    ColorMap("white_only", [RGBA(1.0, 1.0, 1.0, 1.0), RGBA(1.0, 1.0, 1.0, 1.0)]);
+    name = "white_only",
+    force = true,
+)
