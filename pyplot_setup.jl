@@ -82,6 +82,13 @@ parula_cmap = ColorMap(
 )
 PyPlot.matplotlib.colormaps.register(parula_cmap; name = "parula", force = true)
 
+# Binary colourscheme for sets
+PyPlot.matplotlib.colormaps.register(
+    ColorMap("twocolor", [RGBA(1.0, 1.0, 1.0, 1.0), RGBA(0.0, 0.0, 0.0, 0.0)]);
+    name = "twocolor",
+    force = true,
+)
+
 # Set universal default parameters to enforce consistent plot style
 rcParams = PyPlot.PyDict(PyPlot.matplotlib."rcParams")
 rcParams["text.usetex"] = true

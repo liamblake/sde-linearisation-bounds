@@ -10,7 +10,7 @@ K = 4.0
 l₁ = 2.0
 c₁ = π
 k₁ = 1.0
-ϵ = 0.3
+ϵ = 1.0
 
 function u!(s, x, t)
     s[1] = c - A * sin(K * x[1]) * cos(x[2]) + ϵ * l₁ * sin(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2])
@@ -42,6 +42,21 @@ function σσᵀ!(s, x, _)
     s[2, 2] = K^2 * cos(K * x[1])^2 * sin(x[2])^2
 end
 
+# S = 1.0
+# function σ!(s, x, t)
+#     s[1, 1] = S * l₁ * sin(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2])
+#     s[1, 2] = 0.0
+#     s[2, 1] = 0.0
+#     s[2, 2] = S * k₁ * cos(k₁ * (x[1] - c₁ * t)) * sin(l₁ * x[2])
+# end
+
+# function σσᵀ!(s, x, t)
+#     s[1, 1] = S^2 * (l₁ * sin(k₁ * (x[1] - c₁ * t)) * cos(l₁ * x[2]))^2
+#     s[2, 1] = 0.0
+#     s[1, 2] = 0.0
+#     s[2, 2] = S^2 * (k₁ * cos(k₁ * (x[1] - c₁ * t)) * sin(l₁ * x[2]))^2
+# end
+
 function main(; regenerate = true)
     Random.seed!(1308234)
 
@@ -69,14 +84,14 @@ function main(; regenerate = true)
     )
 end
 
-main(; regenerate = true)
+main(; regenerate = false)
 
 ### FTLE versus S²
-include("ftle.jl")
-
 begin
+    include("ftle.jl")
+
     # Declare a grid of initial conditions
     xgrid = collect(range(0; stop = π, length = 400))
     ygrid = collect(range(0; stop = π, length = 400))
-    ftle_S2_comparison("rossby", xgrid, ygrid, 0.0, 1.0, u!, ∇u!, σσᵀ!)
+    ftle_S2_comparison("rossby", xgrid, ygrid, 0.0, 1.0, u!, ∇u!, σσᵀ!, 10.0)
 end

@@ -1,46 +1,67 @@
-using ProgressMeter
-using DifferentialEquations
+using PyPlot
 
-include("gaussian_computation.jl")
-include("../pyplot_setup.jl")
-
-"""
-    compute_∇Fs!(dest, x₀s, d, u!, ∇u!, t, T; solver = Tsit5(), solver_kwargs...)
-
-Given a dynamical system ẋ = u(x,t) and a set of initial conditions, compute the flow map gradient
-∇Fₜᵀ(x₀) for each initial condition, by solving the equation of variations directly.
-"""
-function compute_∇Fs!(dest, x₀s, d, u!, ∇u!, t, T; solver = Tsit5(), solver_kwargs...)
-    tmp_mat = Array{Float64}(undef, d, d)
-    init_mat = diagm(ones(d))[:]
-    function flow_map!(s, x, _, t)
-        # Flow map
-        u!(@view(s[1:d]), x[1:d], t)
-
-        # Flow map gradient
-        ∇u!(tmp_mat, x[1:d], t)
-        s[(d + 1):end] .= (tmp_mat * reshape(x[(d + 1):end], d, d))[:]
-
-        nothing
-    end
-
-    prob = ODEProblem(flow_map!, zeros(d + d^2), (t, T))
-    ens =
-        EnsembleProblem(prob; prob_func = (prob, i, _) -> remake(prob; u0 = vcat(x₀s[i], init_mat)))
-    sol = solve(
-        ens,
-        solver,
-        EnsembleThreads();
-        trajectories = length(x₀s),
-        save_everystep = false,
-        save_start = false,
-        solver_kwargs...,
-    )
-
-    dest .= reshape(Array(sol)[(d + 1):end, :, :], d, d, length(x₀s))
+# Define the 2D model
+function u!(s, x, _)
+    s[1] = -4 * x[1] + x[1]^2
+    s[2] = 3 * x[2] - x[2]^3
 end
 
-function ftle_S2_comparison(name, xgrid, ygrid, t0, T, u!, ∇u!, σσᵀ!, R; solver_kwargs...)
+function ∇u!(s, x, _)
+    s[1, 1] = -4 + 2 * x[1]
+    s[1, 2] = 0.0
+    s[2, 1] = 0.0
+    s[2, 2] = 3 - 3 * x[2]^2
+end
+
+function σ!(s, x, _)
+    s[1, 1] = 1.0
+    s[1, 2] = 0.0
+    s[2, 1] = x[2] - 1
+    s[2, 2] = 3 * sin(2 * π * x[1]) * exp(0.8(x[1]))
+end
+
+function σσᵀ!(s, x, _)
+    s[1, 1] = 1.0
+    s[2, 2] = x[2] - 1
+    s[1, 2] = x[2] - 1
+    s[2, 2] = (x[2] - 1)^2 + 9 * sin(2 * π * x[1])^2 * exp(1.6 * x[1])
+end
+
+"""
+
+Dumb algorithm for finding the maximising ridges when it is expected to be solely horizontal.
+"""
+function greedy_ridge_finder(xgrid, field)
+    nx, ny = size(field)
+
+    ridge_idx = Vector{Int64}(undef, nx)
+    ridge_idx[1] = argmax(field[1, :])
+
+    for j in 2:nx
+        # i = ridge_idx[j - 1]
+        ridge_idx[j] = argmax(field[j, :]) # i - 1 + argmax(field[j, (i - 1):(i + 1)])
+    end
+
+    return ridge_idx
+end
+
+### FTLE versus S²
+begin
+    # include("ftle.jl")
+
+    # Declare a grid of initial conditions
+    xgrid = collect(range(0; stop = 2, length = 400))
+    ygrid = collect(range(-0.2; stop = 0.2, length = 400))
+    # ftle_S2_comparison("unstable", xgrid, ygrid, 0.0, 1.0, u!, ∇u!, σσᵀ!, 10.0)
+
+    include("ftle.jl")
+    include("../pyplot_setup.jl")
+    name = "unstable"
+    t0 = 0.0
+    T = 1.0
+    R = 10.0
+    solver_kwargs = Dict()
+
     mesh = [[x, y] for x in xgrid, y in ygrid][:]
 
     ∇Fs = Array{Float64}(undef, 2, 2, length(mesh))
@@ -54,8 +75,18 @@ function ftle_S2_comparison(name, xgrid, ygrid, t0, T, u!, ∇u!, σσᵀ!, R; s
     ax.set_xlabel(L"y_1")
     ax.set_ylabel(L"y_2")
 
-    p = ax.pcolormesh(xgrid, ygrid, ftle_grid'; norm = "log", cmap = :pink, rasterized = true)
+    # PyPlot.matplotlib.colormaps.get_cmap("bwr").set_bad(RGB(0.0, 0.0, 0.0))
+    ftle_ridge = greedy_ridge_finder(xgrid, ftle_grid)
+    # ftle_grid[:, ftle_ridge] .= NaN
+
+    p = ax.pcolormesh(xgrid, ygrid, ftle_grid'; norm = "log", cmap = :bwr, rasterized = true)
     colorbar(p; ax = ax, location = "top", aspect = 40)
+
+    # ftle_ridge = greedy_ridge_finder(xgrid, ftle_grid)
+    # # Turn into a binary matrix
+    # ftle_ridge_grid = zeros(length(xgrid), length(ygrid))
+    # ftle_ridge_grid[:, ftle_ridge] .= 1.0
+    # ax.pcolor(xgrid, ygrid, ftle_ridge_grid'; cmap = "twocolor", rasterized = true)
 
     fig.savefig("output/$name/ftle.pdf"; dpi = 600, bbox_inches = "tight")
     close(fig)
@@ -88,7 +119,9 @@ function ftle_S2_comparison(name, xgrid, ygrid, t0, T, u!, ∇u!, σσᵀ!, R; s
     ax.set_xlabel(L"y_1")
     ax.set_ylabel(L"y_2")
 
-    p = ax.pcolormesh(xgrid, ygrid, S2_zero_grid'; norm = "log", cmap = :pink, rasterized = true)
+    S2_ridge = greedy_ridge_finder(xgrid, S2_zero_grid)
+    # S2_zero_grid[:, S2_ridge] .= NaN
+    p = ax.pcolormesh(xgrid, ygrid, S2_zero_grid'; norm = "log", cmap = :bwr, rasterized = true)
     colorbar(p; ax = ax, location = "top", aspect = 40)
 
     fig.savefig("output/$name/S2_zero.pdf"; dpi = 600, bbox_inches = "tight")
@@ -108,9 +141,12 @@ function ftle_S2_comparison(name, xgrid, ygrid, t0, T, u!, ∇u!, σσᵀ!, R; s
     ax.set_xlabel(L"y_1")
     ax.set_ylabel(L"y_2")
 
-    p = ax.pcolormesh(xgrid, ygrid, S2_I_grid'; norm = "log", cmap = :pink, rasterized = true)
+    S2_ridge = greedy_ridge_finder(xgrid, S2_I_grid)
+    # S2_I_grid[:, S2_ridge] .= NaN
+    p = ax.pcolormesh(xgrid, ygrid, S2_I_grid'; norm = "log", cmap = :bwr, rasterized = true)
     colorbar(p; ax = ax, location = "top", aspect = 40)
 
     fig.savefig("output/$name/S2_I.pdf"; dpi = 600, bbox_inches = "tight")
     close(fig)
 end
+
