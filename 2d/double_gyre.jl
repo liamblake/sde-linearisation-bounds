@@ -52,5 +52,10 @@ begin
     # Declare a grid of initial conditions
     xgrid = collect(range(0; stop = 2.0, length = 100))
     ygrid = collect(range(0; stop = 1.0, length = 100))
-    ftle_S2_comparison("double_gyre", xgrid, ygrid, 0.0, 5.0, u!, ∇u!, σσᵀ!, 0.1)
+
+    dx = 0.0025
+    xgrid = dx:dx:(2.0 - dx)
+    ygrid = dx:dx:(1.0 - dx)
+
+    ftle_S2_comparison("double_gyre", xgrid, ygrid, 0.0, 5.0, 0.01, u!, ∇u!, σσᵀ!, 10.0)
 end

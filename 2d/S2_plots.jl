@@ -40,40 +40,28 @@ function compute_∇Fs!(dest, x₀s, d, u!, ∇u!, t, T; solver = Tsit5(), solve
     dest .= reshape(Array(sol)[(d + 1):end, :, :], d, d, length(x₀s))
 end
 
-function ftle_S2_comparison(name, xgrid, ygrid, t0, T, u!, ∇u!, σσᵀ!, R; solver_kwargs...)
+"""
+    S2_computation(name, xgrid, ygrid, t0, T, dt, u!, ∇u!, σσᵀ!, R; solver_kwargs...)
+
+Compute and plot the stochastic sensitivity (S²) field for the 2-dimensional model with velocity
+field `u!`, gradient `∇u!`, and diffusion matrix `σσᵀ!`, on the grid of initial
+conditions specified by xgrid and ygrid and over the time interval (t0, T) with integration timestep
+dt. The S² field is plotted, along with the robust sets for the given threshold R.
+"""
+function S2_computation(name, xgrid, ygrid, t0, T, dt, u!, ∇u!, σσᵀ!, R; solver_kwargs...)
     mesh = [[x, y] for x in xgrid, y in ygrid][:]
 
-    ∇Fs = Array{Float64}(undef, 2, 2, length(mesh))
-    compute_∇Fs!(∇Fs, mesh, 2, u!, ∇u!, t0, T; solver_kwargs...)
-
-    ftle_comp = J -> eigen(Symmetric(J' * J)).values[2]
-    ftle_grid = reshape(map(ftle_comp, eachslice(∇Fs; dims = 3)), length(xgrid), length(ygrid))
-
-    # Plot as a heatmap
-    fig, ax = subplots()
-    ax.set_xlabel(L"y_1")
-    ax.set_ylabel(L"y_2")
-
-    p = ax.pcolormesh(xgrid, ygrid, ftle_grid'; norm = "log", cmap = :pink, rasterized = true)
-    colorbar(p; ax = ax, location = "top", aspect = 40)
-
-    fig.savefig("output/$name/ftle.pdf"; dpi = 600, bbox_inches = "tight")
-    close(fig)
-
     # Compute the stochastic sensitivity field with a zero initial condition
-    ts = range(t0; stop = T, length = 300)
+    ts = range(t0; stop = T, step = dt)
     wtmp = Vector{Vector}(undef, length(ts))
     Σ_tmp = Vector{Matrix}(undef, length(ts))
-    Σs_zero = Array{Float64}(undef, 2, 2, length(mesh))
-    Σs_I = Array{Float64}(undef, 2, 2, length(mesh))
+    Σs = Array{Float64}(undef, 2, 2, length(mesh))
 
-    pbar = Progress(length(mesh), 1, "Computing S² values...", 50)
+    pbar = Progress(length(mesh), 1, "Computing covariance matrices...", 50)
     for (i, x₀) in enumerate(mesh)
+        # S2 with zero initial condition
         gaussian_computation!(wtmp, Σ_tmp, 2, u!, ∇u!, σσᵀ!, x₀, zeros(2, 2), ts)
-        Σs_zero[:, :, i] = Σ_tmp[end]
-
-        gaussian_computation!(wtmp, Σ_tmp, 2, u!, ∇u!, σσᵀ!, x₀, diagm(ones(2)), ts)
-        Σs_I[:, :, i] = Σ_tmp[end]
+        Σs[:, :, i] = Σ_tmp[end]
 
         next!(pbar)
     end
@@ -81,15 +69,14 @@ function ftle_S2_comparison(name, xgrid, ygrid, t0, T, u!, ∇u!, σσᵀ!, R; s
 
     S2_comp = J -> eigen(J).values[2]
 
-    S2_zero_grid = reshape(map(S2_comp, eachslice(Σs_zero; dims = 3)), length(xgrid), length(ygrid))
-    S2_I_grid = reshape(map(S2_comp, eachslice(Σs_I; dims = 3)), length(xgrid), length(ygrid))
+    S2_grid = reshape(map(S2_comp, eachslice(Σs; dims = 3)), length(xgrid), length(ygrid))
 
     fig, ax = subplots()
     ax.set_xlabel(L"y_1")
     ax.set_ylabel(L"y_2")
 
-    p = ax.pcolormesh(xgrid, ygrid, S2_zero_grid'; norm = "log", cmap = :pink, rasterized = true)
-    colorbar(p; ax = ax, location = "top", aspect = 40)
+    p = ax.pcolormesh(xgrid, ygrid, S2_grid'; norm = "log", cmap = :pink, rasterized = true)
+    colorbar(p; ax = ax, location = "top", aspect = 40, label = L"S^2")
 
     fig.savefig("output/$name/S2_zero.pdf"; dpi = 600, bbox_inches = "tight")
     close(fig)
@@ -99,18 +86,25 @@ function ftle_S2_comparison(name, xgrid, ygrid, t0, T, u!, ∇u!, σσᵀ!, R; s
     ax.set_xlabel(L"y_1")
     ax.set_ylabel(L"y_2")
 
-    p = ax.pcolormesh(xgrid, ygrid, (S2_zero_grid .< R)'; cmap = "twocolor", rasterized = true)
+    p = ax.pcolormesh(xgrid, ygrid, (S2_grid .< R)'; cmap = "twocolor_blue", rasterized = true)
+
+    # Trying to get an invisible colourbar - overlay a transparent copy of the field, but with a
+    # completely transparent colormap. A dirty hack, according to my Copilot overlord.
+    p = ax.pcolormesh(
+        xgrid,
+        ygrid,
+        (S2_grid .< R)';
+        cmap = ColorMap("nothing", [RGBA(0.0, 0.0, 0.0, 0.0), RGBA(0.0, 0.0, 0.0, 0.0)]),
+        rasterized = true,
+    )
+
+    cb = colorbar(p; ax = ax, location = "top", aspect = 40, label = L"S^2")
+
+    # Hide label, ticks, and outline of colorbar
+    cb.ax.xaxis.label.set_color(:white)
+    cb.ax.tick_params(; axis = "x", colors = :white)
+    cb.outline.set_visible(false)
 
     fig.savefig("output/$name/S2_robust.pdf"; dpi = 600, bbox_inches = "tight")
-    close(fig)
-
-    fig, ax = subplots()
-    ax.set_xlabel(L"y_1")
-    ax.set_ylabel(L"y_2")
-
-    p = ax.pcolormesh(xgrid, ygrid, S2_I_grid'; norm = "log", cmap = :pink, rasterized = true)
-    colorbar(p; ax = ax, location = "top", aspect = 40)
-
-    fig.savefig("output/$name/S2_I.pdf"; dpi = 600, bbox_inches = "tight")
     close(fig)
 end
