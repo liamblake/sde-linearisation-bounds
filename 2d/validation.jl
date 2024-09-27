@@ -8,7 +8,7 @@ using ProgressMeter
 include("../pyplot_setup.jl")
 save_dpi = 600
 
-include("gaussian_computation.jl")
+include("../computations/gaussian_computation.jl")
 
 """
 	pnorm(A; dims=1, p=2)
