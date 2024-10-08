@@ -98,7 +98,7 @@ i1 = 1
 i2 = 8
 t1 = days[i1]
 t2 = days[i2]
-dt = 1 / (24)
+dt = 1 / (2*24)
 tspan = t1:dt:t2
 
 ################################## STOCHASTIC SENSITIVITY FIELDS ###################################
@@ -295,4 +295,93 @@ begin
             close(fig)
         end
     end
+end
+
+### Repeat analysis, but with a simple eddy parameterisation
+eddyT = 8.0   # Eddy lifetime
+eddyS = 35.0    # Eddy diffusivity
+
+function vel!(s, x, t)
+    # Velocity
+    s[1] = u_interp(x[1], x[2], t) + s[3]
+    s[2] = v_interp(x[1], x[2], t) + s[4]
+
+    # Perturbations
+    s[3] = -s[3] / eddyT
+    s[4] = -s[4] / eddyT
+end
+
+# Finite-difference approximation of ∇u from interpolated data + analytic derivatives
+function ∇u!(s, x, t)
+    s .= 0
+
+    s[1, 1] = u_interp(x[1] + dx, x[2], t) - u_interp(x[1] - dx, x[2], t)
+    s[1, 2] = u_interp(x[1], x[2] + dx, t) - u_interp(x[1], x[2] - dx, t)
+    s[2, 1] = v_interp(x[1] + dx, x[2], t) - v_interp(x[1] - dx, x[2], t)
+    s[2, 2] = v_interp(x[1], x[2] + dx, t) - v_interp(x[1], x[2] - dx, t)
+    rmul!(s, 1 / (2 * dx))
+
+    s[1, 3] = 1.0
+    s[2, 4] = 1.0
+
+    s[3, 3] = -1 / eddyT
+    s[4, 4] = -1 / eddyT
+end
+
+# Diffusion matrix
+function σ!(s, x, t)
+    s .= 0.0
+
+    s[3, 3] = eddyS
+    s[4, 4] = eddyS
+end
+
+function σσᵀ!(s, x, t)
+    s .= 0.0
+
+    s[3, 3] = eddyS^2
+    s[4, 4] = eddyS^2
+end
+
+res = 0.05
+
+begin
+    wtmp = Vector{Vector}(undef, length(tspan))
+    Σtmp = Vector{Matrix}(undef, length(tspan))
+
+    x_grid = lon_range[1]:res:lon_range[2]
+    y_grid = lat_range[1]:res:lat_range[2]
+    inits = [[x, y] for x in x_grid, y in y_grid][:]
+
+    S2 = Vector{Float64}(undef, length(inits))
+    s2 = Vector{Float64}(undef, length(inits))
+
+    @showprogress desc = "Computing eddy matrices..." for (i, x0) in enumerate(inits)
+        gaussian_computation!(wtmp, Σtmp, 4, vel!, ∇u!, σσᵀ!, [x0; 0.0; 0.0], zeros(4, 4), tspan)
+        s2[i], S2[i] = eigvals(Σtmp[end][1:2, 1:2])
+    end
+
+    # Stochastic sensitivity
+    fig, ax = subplots()
+    ax.set_xlabel("°W")
+    ax.set_ylabel("°N")
+
+    pc = ax.pcolormesh(
+        x_grid,
+        y_grid,
+        reshape(S2, length(x_grid), length(y_grid))';
+        cmap = :pink,
+        norm = "log",
+        rasterized = true,
+    )
+    colorbar(pc; ax = ax, location = "top", aspect = 40, label = L"S^2")
+
+    # Overlay land
+    ax.pcolor(lon, lat, land'; cmap = "twocolor", rasterized = true, zorder = 1)
+
+    xlim(lon_range)
+    ylim(lat_range)
+    ax.set_xticks(ax.get_xticks(), -Int64.(ax.get_xticks()))
+    fig.savefig("$fdir/S2_field_eddy.pdf"; dpi = dpi, bbox_inches = "tight")
+    close(fig)
 end
