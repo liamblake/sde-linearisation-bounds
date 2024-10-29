@@ -98,13 +98,13 @@ i1 = 1
 i2 = 8
 t1 = days[i1]
 t2 = days[i2]
-dt = 1 / (2*24)
+dt = 1 / (1 * 24)
 tspan = t1:dt:t2
 
 ################################## STOCHASTIC SENSITIVITY FIELDS ###################################
 # Plot the stochastic sensitivity field over the plotting window, at both the resolution of the data
 # and a higher resolution.
-begin
+if false
     wtmp = Vector{Vector}(undef, length(tspan))
     Σtmp = Vector{Matrix}(undef, length(tspan))
 
@@ -298,21 +298,28 @@ begin
 end
 
 ### Repeat analysis, but with a simple eddy parameterisation
-eddyT = 8.0   # Eddy lifetime
-eddyS = 35.0    # Eddy diffusivity
+eddyT = 8.0  # Eddy lifetime
+# eddyS = 18000m    # Eddy diffusivity, converted to degrees in each direction
+middle_lat = lat_range[1] + (lat_range[2] - lat_range[1]) / 2
+eddyS1 = sqrt(arc_to_meridonal(WGS84, middle_lat) * 18000)
+eddyS2 = sqrt(arc_to_parallel(WGS84, middle_lat) * 18000)
 
-function vel!(s, x, t)
+res = 0.05
+
+# dx = dx * 2
+
+function vel_eddy!(s, x, t)
     # Velocity
-    s[1] = u_interp(x[1], x[2], t) + s[3]
-    s[2] = v_interp(x[1], x[2], t) + s[4]
+    s[1] = u_interp(x[1], x[2], t) + x[3]
+    s[2] = v_interp(x[1], x[2], t) + x[4]
 
     # Perturbations
-    s[3] = -s[3] / eddyT
-    s[4] = -s[4] / eddyT
+    s[3] = -x[3] / eddyT
+    s[4] = -x[4] / eddyT
 end
 
 # Finite-difference approximation of ∇u from interpolated data + analytic derivatives
-function ∇u!(s, x, t)
+function ∇u_eddy!(s, x, t)
     s .= 0
 
     s[1, 1] = u_interp(x[1] + dx, x[2], t) - u_interp(x[1] - dx, x[2], t)
@@ -329,21 +336,19 @@ function ∇u!(s, x, t)
 end
 
 # Diffusion matrix
-function σ!(s, x, t)
+function σ_eddy!(s, x, t)
     s .= 0.0
 
-    s[3, 3] = eddyS
-    s[4, 4] = eddyS
+    s[3, 1] = eddyS1
+    s[4, 2] = eddyS2
 end
 
-function σσᵀ!(s, x, t)
+function σσᵀ_eddy!(s, x, t)
     s .= 0.0
 
-    s[3, 3] = eddyS^2
-    s[4, 4] = eddyS^2
+    s[3, 3] = eddyS1^2
+    s[4, 4] = eddyS2^2
 end
-
-res = 0.05
 
 begin
     wtmp = Vector{Vector}(undef, length(tspan))
@@ -357,7 +362,7 @@ begin
     s2 = Vector{Float64}(undef, length(inits))
 
     @showprogress desc = "Computing eddy matrices..." for (i, x0) in enumerate(inits)
-        gaussian_computation!(wtmp, Σtmp, 4, vel!, ∇u!, σσᵀ!, [x0; 0.0; 0.0], zeros(4, 4), tspan)
+        gaussian_computation!(wtmp, Σtmp, 4, vel_eddy!, ∇u_eddy!, σσᵀ_eddy!, [x0; 0.0; 0.0], zeros(4, 4), tspan)
         s2[i], S2[i] = eigvals(Σtmp[end][1:2, 1:2])
     end
 
