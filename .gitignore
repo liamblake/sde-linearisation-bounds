@@ -29,3 +29,6 @@ det_traj_visualisation.jl
 
 # Used in developing an efficient SDE solver scheme
 benchmark.jl
+
+# Notes
+derivatives.*

@@ -64,6 +64,7 @@ function gaussian_computation!(
         # Update the state variable
         u!(ut, state[i], t)
         ∇u!(∇ut, state[i], t)
+        # println(∇ut)
         state[i + 1] = state[i] + dt * inv(I - ∇ut * dt / 2) * ut
 
         # Interpolate the state at time t + dt/2
