@@ -1,5 +1,5 @@
 Julia code implementing the results of
 
-> L. Blake, J. Maclean, and S. Balasuriya, *Rigorous convergence bounds for stochastic differential equations with application to uncertainty quantification*, *Physica D*, **accepted** (2025).
+> L. Blake, J. Maclean, and S. Balasuriya, *Rigorous convergence bounds for stochastic differential equations with application to uncertainty quantification*, *Physica D* 481, 134742 (2025).
 
-The preprint is available [here](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=5043181). Please see the article for details on the computations and examples in this codebase.
+The article is available as open access [here](https://www.sciencedirect.com/science/article/pii/S0167278925002192?via%3Dihub). Please see the article for details on the computations and examples in this codebase.
